@@ -43,7 +43,7 @@ auto addRandomEdges(G& a, R& rnd, size_t span, V w, int batchSize) {
   };
   for (int i=0; i<batchSize; ++i)
     retry([&]() { return addRandomEdge(a, rnd, span, w, fe); }, retries);
-  a.correct();
+  a.update();
   return insertions;
 }
 
@@ -61,7 +61,7 @@ auto removeRandomEdges(G& a, R& rnd, int batchSize) {
   };
   for (int i=0; i<batchSize; ++i)
     retry([&]() { return removeRandomEdge(a, rnd, fe); }, retries);
-  a.correct();
+  a.update();
   return deletions;
 }
 

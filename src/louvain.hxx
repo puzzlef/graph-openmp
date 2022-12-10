@@ -305,7 +305,7 @@ void louvainAggregate(G& a, vector<K>& vcs, vector<W>& vcout, const G& x, const 
     for (auto d : vcs)
       a.addEdge(c, d, vcout[d]);
   }
-  a.correct();
+  a.update();
 }
 template <class G, class K, class W>
 inline auto louvainAggregate(vector<K>& vcs, vector<W>& vcout, const G& x, const vector<K>& vcom) {

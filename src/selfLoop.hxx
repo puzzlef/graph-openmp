@@ -4,7 +4,7 @@
 
 
 
-// HAS-SELF-LOOP
+// HAS SELF-LOOP
 // -------------
 
 template <class G, class K>
@@ -38,13 +38,13 @@ inline auto selfLoopCount(const G& x) {
 
 
 
-// SELF-LOOPS
-// ----------
+// SELF-LOOP
+// ---------
 
 template <class G, class E, class FT>
 void selfLoopU(G& a, const E& w, FT ft) {
   a.forEachVertexKey([&](auto u) { if (ft(u)) a.addEdge(u, u, w); });
-  a.correct();
+  a.update();
 }
 template <class G, class E, class FT>
 auto selfLoop(const G& x, const E& w, FT ft) {

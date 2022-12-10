@@ -124,7 +124,7 @@ void louvainAggregateOmp(G& a, vector<vector<K>*>& vcs, vector<vector<W>*>& vcou
     for (auto d : *vcs[t])
       a.addEdge(c, d, (*vcout[t])[d]);
   }
-  a.correct();
+  a.update();
 }
 template <class G, class K, class W>
 inline auto louvainAggregateOmp(vector<vector<K>*>& vcs, vector<vector<W>*>& vcout, const G& x, const vector<K>& vcom) {

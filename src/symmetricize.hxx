@@ -6,13 +6,12 @@
 // SYMMETRICIZE
 // ------------
 
-template <bool CHK=false, class G>
+template <class G>
 void symmetricizeU(G& a) {
   a.forEachVertexKey([&](auto u) {
-    if (!CHK) a.forEachEdge(u, [&](auto v, auto w) { a.addEdge(v, u, w); });
-    else a.forEachEdge(u, [&](auto v, auto w) { if (!a.hasEdge(v, u)) a.addEdge(v, u, w); });
+    a.forEachEdge(u, [&](auto v, auto w) { a.addEdge(v, u, w); });
   });
-  a.correct(CHK);
+  a.update();
 }
 
 template <class H, class G>
@@ -24,7 +23,7 @@ void symmetricizeW(H& a, const G& x) {
       a.addEdge(v, u, w);
     });
   });
-  a.correct();
+  a.update();
 }
 
 template <class G>

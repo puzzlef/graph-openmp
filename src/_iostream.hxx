@@ -3,37 +3,17 @@
 #include <utility>
 #include <iterator>
 #include <array>
-#include <string>
 #include <vector>
 #include <ostream>
-#include <fstream>
 #include <iostream>
 
 using std::pair;
 using std::array;
-using std::string;
 using std::vector;
-using std::ios;
 using std::ostream;
-using std::ifstream;
 using std::is_fundamental;
 using std::iterator_traits;
 using std::cout;
-
-
-
-
-// READ-FILE
-// ---------
-
-string readFileText(const char *pth) {
-  string a; ifstream f(pth);
-  f.seekg(0, ios::end);
-  a.resize(f.tellg());
-  f.seekg(0);
-  f.read((char*) a.c_str(), a.size());
-  return a;
-}
 
 
 

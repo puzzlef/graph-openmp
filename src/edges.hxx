@@ -9,7 +9,7 @@ using std::vector;
 
 
 
-// EDGE-KEYS
+// EDGE KEYS
 // ---------
 
 template <class G, class K>
@@ -27,7 +27,7 @@ inline auto edgeKey(const G& x, K u) {
 
 
 
-// EDGE-VALUES
+// EDGE VALUES
 // -----------
 
 template <class G, class K>
@@ -38,7 +38,7 @@ inline auto edgeValues(const G& x, K u) {
 
 
 
-// EDGE-DATA
+// EDGE DATA
 // ---------
 
 template <class G, class KS, class FM>

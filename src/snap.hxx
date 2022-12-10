@@ -13,7 +13,7 @@ using std::getline;
 
 
 
-// READ-SNAP-TEMPORAL
+// READ SNAP TEMPORAL
 // ------------------
 
 template <class G>
@@ -32,6 +32,6 @@ bool readSnapTemporalW(G& a, istream& s, size_t N, bool sym=false) {
     string ln; getline(s, ln);
     if (!readSnapTemporalLineW(a, ln, sym)) break;
   }
-  if (i>0) a.correct();
+  if (i>0) a.update();
   return N==0 || i>0;
 }

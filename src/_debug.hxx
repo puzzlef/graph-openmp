@@ -124,7 +124,7 @@
 
 
 
-// ON-SIGNAL
+// ON SIGNAL
 // ---------
 
 #define STACK_TRACE_SIZE 32

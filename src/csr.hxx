@@ -12,7 +12,7 @@ using std::transform;
 
 
 
-// SOURCE-OFFSETS
+// SOURCE OFFSETS
 // --------------
 
 template <class G, class KS>
@@ -34,7 +34,7 @@ inline auto sourceOffsets(const G& x) {
 
 
 
-// DESTINATION-INDICES
+// DESTINATION INDICES
 // -------------------
 
 template <class G, class KS>
@@ -53,7 +53,7 @@ auto destinationIndices(const G& x) {
 
 
 
-// CSR-EQUAL
+// CSR EQUAL
 // ---------
 
 template <class K, class V>
@@ -111,7 +111,7 @@ inline bool csrEqual(const vector<size_t>& xv, const vector<K>& xe, const vector
 
 
 
-// CSR-GRAPH
+// CSR GRAPH
 // ---------
 
 template <class G, class K, class V>
@@ -127,7 +127,7 @@ void csrGraphW(G& a, const size_t *xv, const K *xd, const K *xe, const V *xw, si
       a.addEdge(u, v, w);
     }
   }
-  a.correct();
+  a.update();
 }
 template <class G, class K, class V>
 void csrGraphW(G& a, const vector<size_t>& xv, const vector<K>& xd, const vector<K>& xe, const vector<V>& xw) {
@@ -160,7 +160,7 @@ auto csrGraph(const vector<size_t>& xv, const vector<K>& xe) {
 
 
 
-// CSR-SUM-EDGE-VALUES
+// CSR SUM EDGE VALUES
 // -------------------
 
 template <class K, class V, class A=double>

@@ -5,7 +5,7 @@ using std::uniform_real_distribution;
 
 
 
-// ADD-RANDOM-EDGE
+// ADD RANDOM EDGE
 // ---------------
 
 template <class G, class R, class V, class FE>
@@ -54,7 +54,7 @@ bool addRandomEdgeByDegree(G& a, R& rnd, size_t span, V w) {
 
 
 
-// REMOVE-RANDOM-EDGE
+// REMOVE RANDOM EDGE
 // ------------------
 
 template <class G, class R, class K, class FE>

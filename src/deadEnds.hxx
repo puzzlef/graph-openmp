@@ -8,7 +8,7 @@ using std::unordered_set;
 
 
 
-// IS-DEAD-END
+// IS DEAD-END
 // -----------
 
 template <class G, class K>

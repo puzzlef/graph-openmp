@@ -11,7 +11,7 @@ using std::unordered_map;
 
 
 
-// VERTEX-KEYS
+// VERTEX KEYS
 // -----------
 
 template <class G>
@@ -22,7 +22,7 @@ inline auto vertexKeys(const G& x) {
 
 
 
-// VERTEX-VALUES
+// VERTEX VALUES
 // -------------
 
 template <class G>
@@ -33,7 +33,7 @@ inline auto vertexValues(const G& x) {
 
 
 
-// VERTEX-DEGREES
+// VERTEX DEGREES
 // --------------
 
 template <class G, class KS, class FM>
@@ -58,7 +58,7 @@ inline auto vertexDegrees(const G& x) {
 
 
 
-// VERTEX-DATA
+// VERTEX DATA
 // -----------
 
 template <class G, class KS, class FM>
@@ -84,7 +84,7 @@ inline auto vertexData(const G& x) {
 
 
 
-// CREATE-CONTAINER
+// CREATE CONTAINER
 // ----------------
 
 template <class G, class T>
@@ -99,7 +99,7 @@ inline auto createCompressedContainer(const G& x, const T& _) {
 
 
 
-// DECOMPRESS-CONTAINER
+// DECOMPRESS CONTAINER
 // --------------------
 
 template <class G, class T, class KS>
@@ -147,7 +147,7 @@ inline auto decompressKeyContainer(const G& x, const vector<K>& vs) {
 
 
 
-// COMPRESS-CONTAINER
+// COMPRESS CONTAINER
 // ------------------
 
 template <class G, class T, class KS>
@@ -196,7 +196,7 @@ inline auto compressKeyContainer(const G& x, const vector<K>& vs) {
 
 
 
-// VERTICES-EQUAL
+// VERTICES EQUAL
 // --------------
 
 template <class G, class K>

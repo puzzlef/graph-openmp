@@ -86,7 +86,7 @@ inline double modularity(const G& x, double M, double R=1.0) {
 
 
 
-// DELTA-MODULARITY
+// DELTA MODULARITY
 // ----------------
 
 /**
