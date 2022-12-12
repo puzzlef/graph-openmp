@@ -166,7 +166,7 @@ inline void readMtxOmpW(G& a, istream& s) {
   updateOmpU(a);
 }
 template <class G>
-inline void readMtxW(G& a, const char *pth) {
+inline void readMtxOmpW(G& a, const char *pth) {
   ifstream f(pth);
   readMtxOmpW(a, f);
 }
