@@ -115,13 +115,13 @@ using std::cout;
   inline auto vertexValues() const noexcept { return x.vertexValues(); } \
   inline auto vertices()     const noexcept { return x.vertices(); }
 #define GRAPH_EDGES_FROM(K, V, E, x, name) \
-  inline auto edgeKeys(K u)   const noexcept { return x.##name##Keys(u); } \
-  inline auto edgeValues(K u) const noexcept { return x.##name##Values(u); } \
-  inline auto edges(K u)      const noexcept { return x.##name##s(u); }
+  inline auto edgeKeys(K u)   const noexcept { return x.name##Keys(u); } \
+  inline auto edgeValues(K u) const noexcept { return x.name##Values(u); } \
+  inline auto edges(K u)      const noexcept { return x.name##s(u); }
 #define GRAPH_INEDGES_FROM(K, V, E, x, name) \
-  inline auto inEdgeKeys(K u)   const noexcept { return x.##name##Keys(u); } \
-  inline auto inEdgeValues(K u) const noexcept { return x.##name##Values(u); } \
-  inline auto inEdges(K u)      const noexcept { return x.##name##s(u); }
+  inline auto inEdgeKeys(K u)   const noexcept { return x.name##Keys(u); } \
+  inline auto inEdgeValues(K u) const noexcept { return x.name##Values(u); } \
+  inline auto inEdges(K u)      const noexcept { return x.name##s(u); }
 
 #define GRAPH_ENTRIES(K, V, E, vexists, vvalues, eto, efrom, enone) \
   GRAPH_VERTICES(K, V, E, vexists, vvalues) \
@@ -474,7 +474,7 @@ class DiGraph {
 
   // Property operations.
   public:
-  GRAPH_SIZES(K, V, E, N, M, vexists)
+  GRAPH_SIZE(K, V, E, N, M, vexists)
   GRAPH_DIRECTED(K, V, E, true)
 
   // Scan operations.
@@ -507,7 +507,7 @@ class DiGraph {
 };
 
 template <class K=uint32_t, class V=NONE, class E=NONE>
-using UnorderedDiGraph = DiGraph<K, V, E, LazyBitset;
+using UnorderedDiGraph = DiGraph<K, V, E, LazyBitset>;
 
 
 
@@ -553,7 +553,7 @@ class OutDiGraph {
 
   // Update operations.
   public:
-  GRAPH_UPDATE(K, V, E, M, buf, u, eto[u].update(buf), false)
+  GRAPH_UPDATE(K, V, E, M, u, buf, eto[u].update(buf), false)
   GRAPH_CLEAR_SEARCH(K, V, E, N, M, vexists, vvalues, eto)
   GRAPH_RESPAN_SEARCH(K, V, E, vexists, vvalues, eto)
   GRAPH_ADD_VERTEX(K, V, E, N, vexists, vvalues)

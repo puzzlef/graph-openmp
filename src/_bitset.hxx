@@ -164,7 +164,7 @@ class LazyBitset {
   LAZY_BITSET_LOCATE(K, V, inline, noexcept)
   LAZY_BITSET_LOCATE(K, V, inline, const noexcept)
   public:
-  BITSET_FIND(K, V, pairs)
+  BITSET_FIND(K, V)
 
   // Access operations.
   public:

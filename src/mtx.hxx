@@ -29,7 +29,7 @@ using std::getline;
 inline size_t readMtxHeader(istream& s, bool& sym, size_t& rows, size_t& cols, size_t& size) {
   string ln, h0, h1, h2, h3, h4;
   // Skip past the comments and read the graph type.
-  while (1) {
+  while (true) {
     getline(s, ln);
     if (ln.find('%')!=0) break;
     if (ln.find("%%")!=0) continue;
@@ -54,7 +54,8 @@ inline bool readMtxLineDo(const string& ln, bool sym, FE fe) {
   if (!(ls >> u >> v)) return false;
   ls >> w;
   fe(u, v, w);  // a.addEdge(u, v);
-  if (sym) fe(v, u w);  // a.addEdge(v, u);
+  if (sym) fe(v, u, w);  // a.addEdge(v, u);
+  return true;
 }
 
 
@@ -120,13 +121,14 @@ inline void readMtxDoOmp(istream& s, FV fv, FE fe) {
     // Read several lines from the stream.
     for (int l=0; l<LINES; ++l) {
       string line;
-      if (!getline(s, line) break;
+      if (!getline(s, line)) break;
       lines.push_back(move(line));
     }
     if (lines.empty()) break;
     // Parse lines using multiple threads onto personal edge lists.
+    int L = lines.size();
     #pragma omp parallel for schedule(auto)
-    for (int l=0, L=lines.size(); l<L; ++l) {
+    for (int l=0; l<L; ++l) {
       int t = omp_get_thread_num();
       readMtxLineDo(lines[l], sym, [&](auto u, auto v, auto w) {
         edges[t]->push_back({u, v, w});

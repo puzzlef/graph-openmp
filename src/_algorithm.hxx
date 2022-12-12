@@ -56,7 +56,7 @@ auto non_adjacent_find(I ib, I ie, FE fe) {
   // Compare adjacent elements, and if they
   // dont match, return the first one.
   I it = ib++;
-  for (ib!=ie; ++it, ++ib)
+  for (; ib!=ie; ++it, ++ib)
     if (!fe(*it, *ib)) return it;
   // The last element must be non-adjacent.
   return it;
@@ -263,7 +263,7 @@ auto set_difference_inplace(IX xb, IX xe, IY yb, IY ye, FL fl, FE fe) {
 template <class IX, class IY>
 inline auto set_difference_inplace(IX xb, IX xe, IY yb, IY ye) {
   auto fl = [](const auto& a, const auto& b) { return a <  b; };
-  auto fe = [](const auto& a, const auto& b) { return a == b; }
+  auto fe = [](const auto& a, const auto& b) { return a == b; };
   return set_difference_inplace(xb, xe, yb, ye, fl, fe);
 }
 
@@ -326,7 +326,7 @@ auto set_union_last_inplace(IX xb, IX xe, IY yb, IY ye, IB bb, IB be, FL fl, FE 
 template <class IX, class IY, class IB>
 inline auto set_union_last_inplace(IX xb, IX xe, IY yb, IY ye, IB bb, IB be) {
   auto fl = [](const auto& a, const auto& b) { return a <  b; };
-  auto fe = [](const auto& a, const auto& b) { return a == b; }
+  auto fe = [](const auto& a, const auto& b) { return a == b; };
   return set_union_last_inplace(xb, xe, yb, ye, bb, be, fl, fe);
 }
 
