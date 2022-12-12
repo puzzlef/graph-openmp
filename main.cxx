@@ -17,7 +17,7 @@ using namespace std;
 #endif
 // You can define number of threads with -DMAX_THREADS=...
 #ifndef MAX_THREADS
-#define MAX_THREADS 32
+#define MAX_THREADS 12
 #endif
 
 
@@ -30,9 +30,9 @@ int main(int argc, char **argv) {
   bool sym   = argc>2? stoi(argv[2]) : false;
   int repeat = argc>3? stoi(argv[3]) : 5;
   OutDiGraph<K, None, V> x, y;  // V w = 1;
+  printf("Loading graph %s ...\n", file);
   omp_set_num_threads(MAX_THREADS);
   printf("OMP_NUM_THREADS=%d\n", MAX_THREADS);
-  printf("Loading graph %s ...\n", file);
   float tx = measureDuration([&]() { readMtxW(x, file); });
   println(x); printf("[%09.3f ms] readMtxW\n", tx); x.clear();
   float ty = measureDuration([&]() { readMtxOmpW(y, file); });

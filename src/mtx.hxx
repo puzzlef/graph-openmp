@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdlib>
 #include <utility>
 #include <algorithm>
 #include <string>
@@ -13,7 +14,7 @@
 using std::tuple;
 using std::string;
 using std::istream;
-using std::stringstream;
+using std::istringstream;
 using std::ifstream;
 using std::ofstream;
 using std::move;
@@ -27,35 +28,21 @@ using std::getline;
 // --------
 
 inline size_t readMtxHeader(istream& s, bool& sym, size_t& rows, size_t& cols, size_t& size) {
-  string ln, h0, h1, h2, h3, h4;
+  string line, h0, h1, h2, h3, h4;
   // Skip past the comments and read the graph type.
   while (true) {
-    getline(s, ln);
-    if (ln.find('%')!=0) break;
-    if (ln.find("%%")!=0) continue;
-    stringstream ls(ln);
-    ls >> h0 >> h1 >> h2 >> h3 >> h4;
+    getline(s, line);
+    if (line.find('%')!=0) break;
+    if (line.find("%%")!=0) continue;
+    istringstream sline(line);
+    sline >> h0 >> h1 >> h2 >> h3 >> h4;
   }
   if (h1!="matrix" || h2!="coordinate") return 0;
   sym = h4=="symmetric" || h4=="skew-symmetric";
   // Read rows, cols, size.
-  stringstream ls(ln);
-  ls >> rows >> cols >> size;
+  istringstream sline(line);
+  sline >> rows >> cols >> size;
   return max(rows, cols);
-}
-
-
-template <class FE>
-inline bool readMtxLineDo(const string& ln, bool sym, FE fe) {
-  // Line: <from> <to> [weight].
-  size_t u, v;
-  double w = 1;
-  stringstream ls(ln);
-  if (!(ls >> u >> v)) return false;
-  ls >> w;
-  fe(u, v, w);  // a.addEdge(u, v);
-  if (sym) fe(v, u, w);  // a.addEdge(v, u);
-  return true;
 }
 
 
@@ -65,14 +52,20 @@ inline void readMtxDo(istream& s, FV fv, FE fe) {
   size_t n = readMtxHeader(s, sym, rows, cols, size);
   if (n==0) return;
   // Add all vertices first.
-  // Prevent unnecessary respan.
+  // Prevent unnecessary respan first.
   fv(n);
   for (size_t u=1; u<=n; ++u)
-    fv(u);
+    fv(u);  // a.addVertex(u);
   // Then we add the edges.
   string line;
-  while (getline(s, line))
-    if (!readMtxLineDo(line, sym, fe)) break;
+  while (getline(s, line)) {
+    size_t u, v; double w = 1;
+    istringstream sline(line);
+    if (!(sline >> u >> v)) break;
+    sline >> w;
+    fe(u, v, w);           // a.addEdge(u, v);
+    if (sym) fe(v, u, w);  // a.addEdge(v, u);
+  }
 }
 
 
@@ -82,8 +75,12 @@ inline void readMtxW(G& a, istream& s) {
   using E = typename G::edge_value_type;
   auto fv = [&](auto u) { a.addVertex(K(u)); };
   auto fe = [&](auto u, auto v, auto w) { a.addEdge(K(u), K(v), E(w)); };
+  PERFORMI( auto t0 = timeNow() );
   readMtxDo(s, fv, fe);
+  PERFORMI( auto t1 = timeNow() );
   a.update();
+  PERFORMI( auto t2 = timeNow() );
+  PRINTFI("readMtxOmpW(): read=%.1fms, update=%.1fms\n", duration(t0, t1), duration(t1, t2));
 }
 template <class G>
 inline void readMtxW(G& a, const char *pth) {
@@ -99,61 +96,60 @@ inline void readMtxW(G& a, const char *pth) {
 
 template <class FV, class FE>
 inline void readMtxDoOmp(istream& s, FV fv, FE fe) {
-  using EDGE = tuple<size_t, size_t, double>;
   bool sym; size_t rows, cols, size;
   size_t n = readMtxHeader(s, sym, rows, cols, size);
   if (n==0) return;
   // Add all vertices first.
-  // Prevent unnecessary respan.
+  // Prevent unnecessary respan first.
   fv(n);
   for (size_t u=1; u<=n; ++u)
-    fv(u);
+    fv(u);  // a.addVertex(u);
   // Then we add the edges.
-  // Using 2d vector (for `edges`) causes false sharing.
   const int THREADS = omp_get_max_threads();
-  const int LINES   = 8192;
-  vector<string> lines;
-  vector<vector<EDGE>*> edges(THREADS);
-  for (int i=0; i<THREADS; ++i)
-    edges[i] = new vector<EDGE>();
+  const int LINES   = 131072;
+  const size_t CHUNK_SIZE = 1024;
+  vector<string> lines(LINES);
+  vector<tuple<size_t, size_t, double>> edges(LINES);
+  PERFORMI( float dread  = 0 );
+  PERFORMI( float dparse = 0 );
+  PERFORMI( float dadd   = 0 );
   while (true) {
+    PERFORMI( auto t0 = timeNow() );
     // Read several lines from the stream.
-    for (int l=0; l<LINES; ++l) {
-      string line;
-      if (!getline(s, line)) break;
-      lines.push_back(move(line));
+    int READ = 0;
+    for (int i=0; i<LINES; ++i, ++READ)
+      if (!getline(s, lines[i])) break;
+    if (READ==0) break;
+    PERFORMI( auto t1 = timeNow() );
+    // Parse lines using multiple threads.
+    #pragma omp parallel for schedule(dynamic, 1024)
+    for (int i=0; i<READ; ++i) {
+      char *line = (char*) lines[i].c_str();
+      size_t u = strtoull(line, &line, 10);
+      size_t v = strtoull(line, &line, 10);
+      double w = strtod  (line, &line);
+      edges[i] = {u, v, w? w : 1};
     }
-    if (lines.empty()) break;
-    // Parse lines using multiple threads onto personal edge lists.
-    int L = lines.size();
-    #pragma omp parallel for schedule(auto)
-    for (int l=0; l<L; ++l) {
-      int t = omp_get_thread_num();
-      readMtxLineDo(lines[l], sym, [&](auto u, auto v, auto w) {
-        edges[t]->push_back({u, v, w});
-      });
-    }
-    // Scan all edge lists in each thread, and add edge if the
-    // source vertex belongs to this thread.
-    const size_t CHUNK_SIZE = 2048;
+    PERFORMI( auto t2 = timeNow() );
+    // Add edges to the graph.
     #pragma omp parallel
     {
       int T = omp_get_num_threads();
       int t = omp_get_thread_num();
-      for (int i=0; i<THREADS; ++i) {
-        for (const auto& [u, v, w] : *edges[i]) {
-          size_t chunk = u / CHUNK_SIZE;
-          if (chunk % T == t) fe(u, v, w);
-        }
+      for (int i=0; i<READ; ++i) {
+        const auto& [u, v, w] = edges[i];
+        size_t cu = u / CHUNK_SIZE;
+        size_t cv = v / CHUNK_SIZE;
+        if (cu % T == t) fe(u, v, w);         // a.addEdge(u, v, w);
+        if (sym && cv % T == t) fe(v, u, w);  // a.addEdge(v, u, w);
       }
     }
-    // Reset buffers.
-    lines.clear();
-    for (int i=0, I=edges.size(); i<I; ++i)
-      edges[i]->clear();
+    PERFORMI( auto t3 = timeNow() );
+    PERFORMI( dread  += duration(t0, t1) );
+    PERFORMI( dparse += duration(t1, t2) );
+    PERFORMI( dadd   += duration(t2, t3) );
   }
-  for (int i=0, I=edges.size(); i<I; ++i)
-    delete edges[i];
+  PRINTFI("readMtxDoOmp(): read=%.1fms, parse=%.1fms, add=%.1fms\n", dread, dparse, dadd);
 }
 
 
@@ -163,8 +159,12 @@ inline void readMtxOmpW(G& a, istream& s) {
   using E = typename G::edge_value_type;
   auto fv = [&](auto u) { a.addVertex(K(u)); };
   auto fe = [&](auto u, auto v, auto w) { a.addEdge(K(u), K(v), E(w)); };
+  PERFORMI( auto t0 = timeNow() );
   readMtxDoOmp(s, fv, fe);
+  PERFORMI( auto t1 = timeNow() );
   updateOmpU(a);
+  PERFORMI( auto t2 = timeNow() );
+  PRINTFI("readMtxOmpW(): read=%.1fms, update=%.1fms\n", duration(t0, t1), duration(t1, t2));
 }
 template <class G>
 inline void readMtxOmpW(G& a, const char *pth) {
