@@ -104,9 +104,8 @@ inline void readMtxDoOmp(istream& s, FV fv, FE fe) {
   size_t n = readMtxHeader(s, sym, rows, cols, size);
   if (n==0) return;
   // Add all vertices first.
-  // Ensure no respan during parallel update.
+  // Prevent unnecessary respan.
   fv(n);
-  #pragma omp parallel for schedule(static, 2048)
   for (size_t u=1; u<=n; ++u)
     fv(u);
   // Then we add the edges.
