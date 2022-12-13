@@ -12,8 +12,8 @@ using std::vector;
 
 // UPDATE
 // ------
-
 // Update changes made to a graph.
+
 template <class G>
 inline void updateU(G& a) {
   a.update();

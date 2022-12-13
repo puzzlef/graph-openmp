@@ -46,16 +46,19 @@ inline size_t readMtxHeader(istream& s, bool& sym, size_t& rows, size_t& cols, s
 }
 
 
-template <class FV, class FE>
-inline void readMtxDo(istream& s, FV fv, FE fe) {
+template <class G>
+inline void readMtxW(G& a, istream& s) {
+  using K = typename G::key_type;
+  using E = typename G::edge_value_type;
   bool sym; size_t rows, cols, size;
   size_t n = readMtxHeader(s, sym, rows, cols, size);
   if (n==0) return;
+  PERFORMI( auto t0 = timeNow() );
   // Add all vertices first.
-  // Prevent unnecessary respan first.
-  fv(n);
+  a.reserve(n+1);
   for (size_t u=1; u<=n; ++u)
-    fv(u);  // a.addVertex(u);
+    a.addVertex(K(u));
+  PERFORMI( auto t1 = timeNow() );
   // Then we add the edges.
   string line;
   while (getline(s, line)) {
@@ -63,24 +66,17 @@ inline void readMtxDo(istream& s, FV fv, FE fe) {
     istringstream sline(line);
     if (!(sline >> u >> v)) break;
     sline >> w;
-    fe(u, v, w);           // a.addEdge(u, v);
-    if (sym) fe(v, u, w);  // a.addEdge(v, u);
+    a.addEdge(K(u), K(v), E(w));
+    if (sym) a.addEdge(K(v), K(u), E(w));
   }
-}
-
-
-template <class G>
-inline void readMtxW(G& a, istream& s) {
-  using K = typename G::key_type;
-  using E = typename G::edge_value_type;
-  auto fv = [&](auto u) { a.addVertex(K(u)); };
-  auto fe = [&](auto u, auto v, auto w) { a.addEdge(K(u), K(v), E(w)); };
-  PERFORMI( auto t0 = timeNow() );
-  readMtxDo(s, fv, fe);
-  PERFORMI( auto t1 = timeNow() );
-  a.update();
   PERFORMI( auto t2 = timeNow() );
-  PRINTFI("readMtxOmpW(): read=%.1fms, update=%.1fms\n", duration(t0, t1), duration(t1, t2));
+  // Apply graph update.
+  a.update();
+  PERFORMI( auto t3 = timeNow() );
+  PERFORMI( float dvertices = duration(t0, t1) );
+  PERFORMI( float dedges    = duration(t1, t2) );
+  PERFORMI( float dupdate   = duration(t2, t3) );
+  PRINTFI("readMtxW(): vertices=%.1fms, edges=%.1fms, update=%.1fms\n", dvertices, dedges, dupdate);
 }
 template <class G>
 inline void readMtxW(G& a, const char *pth) {
@@ -94,16 +90,19 @@ inline void readMtxW(G& a, const char *pth) {
 // READ MTX (OPENMP)
 // -----------------
 
-template <class FV, class FE>
-inline void readMtxDoOmp(istream& s, FV fv, FE fe) {
+template <class G>
+inline void readMtxOmpW(G& a, istream& s) {
+  using K = typename G::key_type;
+  using E = typename G::edge_value_type;
   bool sym; size_t rows, cols, size;
   size_t n = readMtxHeader(s, sym, rows, cols, size);
   if (n==0) return;
+  PERFORMI( auto t0 = timeNow() );
   // Add all vertices first.
-  // Prevent unnecessary respan first.
-  fv(n);
+  a.reserve(n+1);
   for (size_t u=1; u<=n; ++u)
-    fv(u);  // a.addVertex(u);
+    a.addVertex(u);
+  PERFORMI( auto t1 = timeNow() );
   // Then we add the edges.
   const int THREADS = omp_get_max_threads();
   const int LINES   = 131072;
@@ -112,15 +111,15 @@ inline void readMtxDoOmp(istream& s, FV fv, FE fe) {
   vector<tuple<size_t, size_t, double>> edges(LINES);
   PERFORMI( float dread  = 0 );
   PERFORMI( float dparse = 0 );
-  PERFORMI( float dadd   = 0 );
+  PERFORMI( float dedges = 0 );
   while (true) {
-    PERFORMI( auto t0 = timeNow() );
+    PERFORMI( auto t2 = timeNow() );
     // Read several lines from the stream.
     int READ = 0;
     for (int i=0; i<LINES; ++i, ++READ)
       if (!getline(s, lines[i])) break;
     if (READ==0) break;
-    PERFORMI( auto t1 = timeNow() );
+    PERFORMI( auto t3 = timeNow() );
     // Parse lines using multiple threads.
     #pragma omp parallel for schedule(dynamic, 1024)
     for (int i=0; i<READ; ++i) {
@@ -130,7 +129,7 @@ inline void readMtxDoOmp(istream& s, FV fv, FE fe) {
       double w = strtod  (line, &line);
       edges[i] = {u, v, w? w : 1};
     }
-    PERFORMI( auto t2 = timeNow() );
+    PERFORMI( auto t4 = timeNow() );
     // Add edges to the graph.
     #pragma omp parallel
     {
@@ -140,31 +139,21 @@ inline void readMtxDoOmp(istream& s, FV fv, FE fe) {
         const auto& [u, v, w] = edges[i];
         size_t cu = u / CHUNK_SIZE;
         size_t cv = v / CHUNK_SIZE;
-        if (cu % T == t) fe(u, v, w);         // a.addEdge(u, v, w);
-        if (sym && cv % T == t) fe(v, u, w);  // a.addEdge(v, u, w);
+        if (cu % T == t) a.addEdge(K(u), K(v), E(w));
+        if (sym && cv % T == t) a.addEdge(K(v), K(u), E(w));
       }
     }
-    PERFORMI( auto t3 = timeNow() );
-    PERFORMI( dread  += duration(t0, t1) );
-    PERFORMI( dparse += duration(t1, t2) );
-    PERFORMI( dadd   += duration(t2, t3) );
+    PERFORMI( auto t5 = timeNow() );
+    PERFORMI( dread  += duration(t2, t3) );
+    PERFORMI( dparse += duration(t3, t4) );
+    PERFORMI( dedges += duration(t4, t5) );
   }
-  PRINTFI("readMtxDoOmp(): read=%.1fms, parse=%.1fms, add=%.1fms\n", dread, dparse, dadd);
-}
-
-
-template <class G>
-inline void readMtxOmpW(G& a, istream& s) {
-  using K = typename G::key_type;
-  using E = typename G::edge_value_type;
-  auto fv = [&](auto u) { a.addVertex(K(u)); };
-  auto fe = [&](auto u, auto v, auto w) { a.addEdge(K(u), K(v), E(w)); };
-  PERFORMI( auto t0 = timeNow() );
-  readMtxDoOmp(s, fv, fe);
-  PERFORMI( auto t1 = timeNow() );
+  PERFORMI( auto t6 = timeNow() );
   updateOmpU(a);
-  PERFORMI( auto t2 = timeNow() );
-  PRINTFI("readMtxOmpW(): read=%.1fms, update=%.1fms\n", duration(t0, t1), duration(t1, t2));
+  PERFORMI( auto t7 = timeNow() );
+  PERFORMI( float dvertices = duration(t0, t1) );
+  PERFORMI( float dupdate   = duration(t6, t7) );
+  PRINTFI("readMtxOmpW(): vertices=%.1fms, read=%.1fms, parse=%.1fms, edges=%.1fms, update=%.1fms\n", dvertices, dread, dparse, dedges, dupdate);
 }
 template <class G>
 inline void readMtxOmpW(G& a, const char *pth) {

@@ -249,14 +249,21 @@ using std::cout;
 #define GRAPH_RESERVE_EDGES_SCAN(K, V, E, eto) \
   GRAPH_RESERVE_EDGES_X(K, V, E, u, deg, eto[u].reserve(deg), false)
 
-#define GRAPH_RESERVE(K, V, E, vexists, vvalues) \
+#define GRAPH_RESERVE_X(K, V, E, vexists, vvalues, n, deg, e0, e1) \
   inline void reserve(size_t n, size_t deg=0) { \
     vexists.resize(max(n, span())); \
     vvalues.resize(max(n, span())); \
+    e0; \
+    e1; \
     if (deg==0) return; \
     for (K u=0; u<span(); ++u) \
       reserveEdges(u, deg); \
   }
+
+#define GRAPH_RESERVE(K, V, E, vexists, vvalues, eto, efrom) \
+  GRAPH_RESERVE_X(K, V, E, vexists, vvalues, n, deg, eto.resize(max(n, span())), efrom.resize(max(n, span())))
+#define GRAPH_RESERVE_SCAN(K, V, E, vexists, vvalues, eto) \
+  GRAPH_RESERVE_X(K, V, E, vexists, vvalues, n, deg, eto.resize(max(n, span())), false)
 #endif
 
 
@@ -456,7 +463,7 @@ class DiGraph {
   // Update operations.
   public:
   GRAPH_RESERVE_EDGES(K, V, E, eto, efrom)
-  GRAPH_RESERVE(K, V, E, vexists, vvalues)
+  GRAPH_RESERVE(K, V, E, vexists, vvalues, eto, efrom)
   GRAPH_UPDATE_EDGES(K, V, E, eto, efrom)
   GRAPH_UPDATE(K, V, E, N, M)
   GRAPH_RESPAN(K, V, E, vexists, vvalues, eto, efrom)
@@ -517,7 +524,7 @@ class OutDiGraph {
   // Update operations.
   public:
   GRAPH_RESERVE_EDGES_SCAN(K, V, E, eto)
-  GRAPH_RESERVE(K, V, E, vexists, vvalues)
+  GRAPH_RESERVE_SCAN(K, V, E, vexists, vvalues, eto)
   GRAPH_UPDATE_EDGES_SCAN(K, V, E, eto)
   GRAPH_UPDATE(K, V, E, N, M)
   GRAPH_RESPAN_SCAN(K, V, E, vexists, vvalues, eto)
