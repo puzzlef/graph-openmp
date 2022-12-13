@@ -1,4 +1,5 @@
 #pragma once
+#include "update.hxx"
 
 
 
@@ -7,7 +8,7 @@
 // ------------
 
 template <class G>
-void symmetricizeU(G& a) {
+inline void symmetricizeU(G& a) {
   a.forEachVertexKey([&](auto u) {
     a.forEachEdge(u, [&](auto v, auto w) { a.addEdge(v, u, w); });
   });
@@ -15,7 +16,8 @@ void symmetricizeU(G& a) {
 }
 
 template <class H, class G>
-void symmetricizeW(H& a, const G& x) {
+inline void symmetricizeW(H& a, const G& x) {
+  a.reserve(x.span());
   x.forEachVertex([&](auto u, auto d) { a.addVertex(u, d); });
   x.forEachVertexKey([&](auto u) {
     x.forEachEdge(u, [&](auto v, auto w) {
@@ -25,9 +27,41 @@ void symmetricizeW(H& a, const G& x) {
   });
   a.update();
 }
+template <class G>
+inline auto symmetricize(const G& x) {
+  G a = x; symmetricizeU(a, x);
+  return a;
+}
+
 
 template <class G>
-auto symmetricize(const G& x) {
-  G a; symmetricizeW(a, x);
+inline void symmetricizeOmpU(G& a) {
+  #pragma omp parallel
+  {
+    a.forEachVertexKey([&](auto u) {
+      a.forEachEdge(u, [&](auto v, auto w) { addEdgeOmpU(a, v, u, w); });
+    });
+  }
+  updateOmpU(a);
+}
+
+template <class H, class G>
+inline void symmetricizeOmpW(H& a, const G& x) {
+  a.reserve(x.span());
+  x.forEachVertex([&](auto u, auto d) { a.addVertex(u, d); });
+  #pragma omp parallel
+  {
+    x.forEachVertexKey([&](auto u) {
+      x.forEachEdge(u, [&](auto v, auto w) {
+        addEdgeOmpU(a, u, v, w);
+        addEdgeOmpU(a, v, u, w);
+      });
+    });
+  }
+  updateOmpU(a);
+}
+template <class G>
+inline auto symmetricizeOmp(const G& x) {
+  G a = x; symmetricizeOmpU(a, x);
   return a;
 }

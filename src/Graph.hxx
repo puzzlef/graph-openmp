@@ -423,6 +423,7 @@ using std::cout;
 // DI-GRAPH
 // --------
 // Directed graph that memorizes in- and out-edges for each vertex.
+// NOTE: Parallel updates wont work (for now).
 
 template <class K=uint32_t, class V=NONE, class E=NONE, tclass2 Bitset=LazyBitset>
 class DiGraph {
@@ -546,6 +547,7 @@ using LazyOutDiGraph = OutDiGraph<K, V, E, LazyBitset>;
 // GRAPH
 // -----
 // Undirected graph.
+// NOTE: Parallel updates wont work (for now).
 
 template <class K=uint32_t, class V=NONE, class E=NONE, tclass2 Bitset=LazyBitset>
 class Graph : public OutDiGraph<K, V, E, Bitset> {

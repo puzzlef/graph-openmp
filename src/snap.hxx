@@ -15,6 +15,7 @@ using std::getline;
 
 // READ SNAP TEMPORAL
 // ------------------
+// TODO: Can be parallelized later.
 
 template <class G>
 bool readSnapTemporalLineW(G& a, const string& ln, bool sym=false) {

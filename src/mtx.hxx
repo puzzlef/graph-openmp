@@ -137,10 +137,8 @@ inline void readMtxOmpW(G& a, istream& s) {
       int t = omp_get_thread_num();
       for (int i=0; i<READ; ++i) {
         const auto& [u, v, w] = edges[i];
-        size_t cu = u / CHUNK_SIZE;
-        size_t cv = v / CHUNK_SIZE;
-        if (cu % T == t) a.addEdge(K(u), K(v), E(w));
-        if (sym && cv % T == t) a.addEdge(K(v), K(u), E(w));
+        addEdgeThreadOmpU(t, T, a, K(u), K(v), E(w));
+        if (sym) addEdgeThreadOmpU(t, T, a, K(v), K(u), E(w));
       }
     }
     PERFORMI( auto t5 = timeNow() );
