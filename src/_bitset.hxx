@@ -201,13 +201,18 @@ class LazyBitset {
   }
 
   public:
+  inline void reserve(size_t n) {
+    pairs.reserve(n);
+  }
+
   inline void clear() noexcept {
     pairs.clear();
     unprocessed = 0;
   }
 
   inline void update(vector<pair<K, V>> *buf=nullptr) {
-    if (unprocessed < 0) updateRemove();
+    if (unprocessed == 0) return;
+    if (unprocessed  < 0) updateRemove();
     else updateAdd(buf);
   }
 
