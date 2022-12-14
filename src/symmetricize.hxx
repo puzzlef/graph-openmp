@@ -8,9 +8,9 @@
 // ------------
 
 template <class G>
-inline void symmetricizeU(G& a) {
-  a.forEachVertexKey([&](auto u) {
-    a.forEachEdge(u, [&](auto v, auto w) { a.addEdge(v, u, w); });
+inline void symmetricizeU(G& a, const G& x) {
+  x.forEachVertexKey([&](auto u) {
+    x.forEachEdge(u, [&](auto v, auto w) { a.addEdge(v, u, w); });
   });
   a.update();
 }
@@ -35,11 +35,11 @@ inline auto symmetricize(const G& x) {
 
 
 template <class G>
-inline void symmetricizeOmpU(G& a) {
+inline void symmetricizeOmpU(G& a, const G& x) {
   #pragma omp parallel
   {
-    a.forEachVertexKey([&](auto u) {
-      a.forEachEdge(u, [&](auto v, auto w) { addEdgeOmpU(a, v, u, w); });
+    x.forEachVertexKey([&](auto u) {
+      x.forEachEdge(u, [&](auto v, auto w) { addEdgeOmpU(a, v, u, w); });
     });
   }
   updateOmpU(a);
