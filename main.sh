@@ -6,7 +6,7 @@ printf "" > "$out"
 
 # Download program
 rm -rf $src
-git clone https://github.com/puzzlef/$src
+git clone https://github.com/ionicf/$src
 cd $src
 
 # Run

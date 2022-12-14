@@ -1,4 +1,4 @@
-# https://www.kaggle.com/wolfram77/puzzlef-graph-openmp
+# https://www.kaggle.com/wolfram77/ionicf-graph-openmp
 import os
 from IPython.display import FileLink
 src="graph-openmp"
@@ -10,7 +10,7 @@ display(FileLink(out))
 
 # Download program
 !rm -rf $src
-!git clone https://github.com/puzzlef/$src
+!git clone https://github.com/ionicf/$src
 !echo ""
 
 # Run
