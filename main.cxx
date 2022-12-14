@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
   LOG("OMP_NUM_THREADS=%d\n", MAX_THREADS);
   // float tx = measureDuration([&]() { readMtxW(x, file); });
   // println(x); printf("[%09.3f ms] readMtxW\n", tx); x.clear();
-  float ty = measureDuration([&]() { readMtxOmpW(y, file); });
+  float ty = measureDuration([&]() { readMtxOmpW(y, file, true); });
   LOG(""); println(y); LOG("[%09.3f ms] readMtxOmpW\n", ty); y.clear();
   printf("\n");
   return 0;

@@ -27,7 +27,7 @@ using std::getline;
 // READ MTX
 // --------
 
-inline size_t readMtxHeader(istream& s, bool& sym, size_t& rows, size_t& cols, size_t& size) {
+inline size_t readMtxHeader(istream& s, bool& symmetric, size_t& rows, size_t& cols, size_t& size) {
   string line, h0, h1, h2, h3, h4;
   // Skip past the comments and read the graph type.
   while (true) {
@@ -38,7 +38,7 @@ inline size_t readMtxHeader(istream& s, bool& sym, size_t& rows, size_t& cols, s
     sline >> h0 >> h1 >> h2 >> h3 >> h4;
   }
   if (h1!="matrix" || h2!="coordinate") return 0;
-  sym = h4=="symmetric" || h4=="skew-symmetric";
+  symmetric = h4=="symmetric" || h4=="skew-symmetric";
   // Read rows, cols, size.
   istringstream sline(line);
   sline >> rows >> cols >> size;
@@ -47,11 +47,11 @@ inline size_t readMtxHeader(istream& s, bool& sym, size_t& rows, size_t& cols, s
 
 
 template <class G>
-inline void readMtxW(G& a, istream& s) {
+inline void readMtxW(G& a, istream& s, bool weighted=false) {
   using K = typename G::key_type;
   using E = typename G::edge_value_type;
-  bool sym; size_t rows, cols, size;
-  size_t n = readMtxHeader(s, sym, rows, cols, size);
+  bool symmetric; size_t rows, cols, size;
+  size_t n = readMtxHeader(s, symmetric, rows, cols, size);
   if (n==0) return;
   PERFORMI( auto t0 = timeNow() );
   // Add all vertices first.
@@ -65,9 +65,9 @@ inline void readMtxW(G& a, istream& s) {
     size_t u, v; double w = 1;
     istringstream sline(line);
     if (!(sline >> u >> v)) break;
-    sline >> w;
+    if (weighted) sline >> w;
     a.addEdge(K(u), K(v), E(w));
-    if (sym) a.addEdge(K(v), K(u), E(w));
+    if (symmetric) a.addEdge(K(v), K(u), E(w));
   }
   PERFORMI( auto t2 = timeNow() );
   // Apply graph update.
@@ -79,9 +79,9 @@ inline void readMtxW(G& a, istream& s) {
   LOGI("readMtxW(): vertices=%.1fms, edges=%.1fms, update=%.1fms\n", dvertices, dedges, dupdate);
 }
 template <class G>
-inline void readMtxW(G& a, const char *pth) {
+inline void readMtxW(G& a, const char *pth, bool weighted=false) {
   ifstream f(pth);
-  readMtxW(a, f);
+  readMtxW(a, f, weighted);
 }
 
 
@@ -91,11 +91,11 @@ inline void readMtxW(G& a, const char *pth) {
 // -----------------
 
 template <class G>
-inline void readMtxOmpW(G& a, istream& s) {
+inline void readMtxOmpW(G& a, istream& s, bool weighted=false) {
   using K = typename G::key_type;
   using E = typename G::edge_value_type;
-  bool sym; size_t rows, cols, size;
-  size_t n = readMtxHeader(s, sym, rows, cols, size);
+  bool symmetric; size_t rows, cols, size;
+  size_t n = readMtxHeader(s, symmetric, rows, cols, size);
   if (n==0) return;
   PERFORMI( auto t0 = timeNow() );
   // Add all vertices first.
@@ -126,7 +126,7 @@ inline void readMtxOmpW(G& a, istream& s) {
       char *line = (char*) lines[i].c_str();
       size_t u = strtoull(line, &line, 10);
       size_t v = strtoull(line, &line, 10);
-      double w = strtod  (line, &line);
+      double w = weighted? strtod(line, &line) : 0;
       edges[i] = {u, v, w? w : 1};
     }
     PERFORMI( auto t4 = timeNow() );
@@ -138,7 +138,7 @@ inline void readMtxOmpW(G& a, istream& s) {
       for (int i=0; i<READ; ++i) {
         const auto& [u, v, w] = edges[i];
         addEdgeThreadOmpU(t, T, a, K(u), K(v), E(w));
-        if (sym) addEdgeThreadOmpU(t, T, a, K(v), K(u), E(w));
+        if (symmetric) addEdgeThreadOmpU(t, T, a, K(v), K(u), E(w));
       }
     }
     PERFORMI( auto t5 = timeNow() );
@@ -154,9 +154,9 @@ inline void readMtxOmpW(G& a, istream& s) {
   LOGI("readMtxOmpW(): vertices=%.1fms, read=%.1fms, parse=%.1fms, edges=%.1fms, update=%.1fms\n", dvertices, dread, dparse, dedges, dupdate);
 }
 template <class G>
-inline void readMtxOmpW(G& a, const char *pth) {
+inline void readMtxOmpW(G& a, const char *pth, bool weighted=false) {
   ifstream f(pth);
-  readMtxOmpW(a, f);
+  readMtxOmpW(a, f, weighted);
 }
 
 
