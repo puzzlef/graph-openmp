@@ -11,7 +11,7 @@ using std::make_tuple;
 // ----------------------------
 
 template <class G, class F>
-auto degreesDo(const G& x, F fn) {
+inline auto degreesDo(const G& x, F fn) {
   using K = typename G::key_type;
   auto  a = createContainer(x, K());
   x.forEachVertexKey([&](auto u) { a[u] = x.degree(u); fn(u, x.degree(u)); });
@@ -25,7 +25,7 @@ inline auto degrees(const G& x) {
 
 
 template <class G>
-auto minDegree(const G& x) {
+inline auto minDegree(const G& x) {
   using K = typename G::key_type;
   K min = K(x.order());
   x.forEachVertexKey([&](auto u) {
@@ -36,7 +36,7 @@ auto minDegree(const G& x) {
 }
 
 template <class G>
-auto maxDegree(const G& x) {
+inline auto maxDegree(const G& x) {
   using K = typename G::key_type;
   K max = 0;
   x.forEachVertexKey([&](auto u) {
@@ -54,7 +54,7 @@ inline double avgDegree(const G& x) {
 
 
 template <class G>
-auto minMaxAvgDegree(const G& x) {
+inline auto minMaxAvgDegree(const G& x) {
   using K = typename G::key_type;
   K min = K(x.order()), max = 0;
   x.forEachVertexKey([&](auto u) {

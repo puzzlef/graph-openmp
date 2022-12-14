@@ -16,7 +16,7 @@ using std::transform;
 // --------------
 
 template <class G, class KS>
-auto sourceOffsets(const G& x, const KS& ks) {
+inline auto sourceOffsets(const G& x, const KS& ks) {
   vector<size_t> a; size_t i = 0;
   a.reserve(x.order()+1);
   for (auto u : ks) {
@@ -38,7 +38,7 @@ inline auto sourceOffsets(const G& x) {
 // -------------------
 
 template <class G, class KS>
-auto destinationIndices(const G& x, const KS& ks) {
+inline auto destinationIndices(const G& x, const KS& ks) {
   using K = typename G::key_type;
   auto ids = valueIndicesUnorderedMap(ks); vector<K> a;
   for (auto u : ks)
@@ -46,7 +46,7 @@ auto destinationIndices(const G& x, const KS& ks) {
   return a;
 }
 template <class G>
-auto destinationIndices(const G& x) {
+inline auto destinationIndices(const G& x) {
   return destinationIndices(x, x.vertexKeys());
 }
 
@@ -57,7 +57,7 @@ auto destinationIndices(const G& x) {
 // ---------
 
 template <class K, class V>
-int csrCompare(const size_t *xv, const K *xd, const K *xe, const V *xw, const size_t *yv, const K *yd, const K *ye, const V *yw, size_t N) {
+inline int csrCompare(const size_t *xv, const K *xd, const K *xe, const V *xw, const size_t *yv, const K *yd, const K *ye, const V *yw, size_t N) {
   vector<size_t> ix, iy;
   for (size_t u=0; u<N; ++u) {
     size_t XOFF = xv[u];
@@ -115,7 +115,7 @@ inline bool csrEqual(const vector<size_t>& xv, const vector<K>& xe, const vector
 // ---------
 
 template <class G, class K, class V>
-void csrGraphW(G& a, const size_t *xv, const K *xd, const K *xe, const V *xw, size_t N) {
+inline void csrGraphW(G& a, const size_t *xv, const K *xd, const K *xe, const V *xw, size_t N) {
   for (size_t u=0; u<N; ++u)
     a.addVertex(u);
   for (size_t u=0; u<N; ++u) {
@@ -130,29 +130,29 @@ void csrGraphW(G& a, const size_t *xv, const K *xd, const K *xe, const V *xw, si
   a.update();
 }
 template <class G, class K, class V>
-void csrGraphW(G& a, const vector<size_t>& xv, const vector<K>& xd, const vector<K>& xe, const vector<V>& xw) {
+inline void csrGraphW(G& a, const vector<size_t>& xv, const vector<K>& xd, const vector<K>& xe, const vector<V>& xw) {
   const K *_xd = xd.empty()? nullptr : xd.data();
   const V *_xw = xw.empty()? nullptr : xw.data();
   csrGraphW(a, xv.data(), _xd, xe.data(), _xw, xv.size()-1);
 }
 template <class G, class K>
-void csrGraphW(G& a, const vector<size_t>& xv, const vector<K>& xe) {
+inline void csrGraphW(G& a, const vector<size_t>& xv, const vector<K>& xe) {
   vector<K> _;
   csrGraphW(a, xv.data(), _, xe.data(), _);
 }
 
 template <class G, class K, class V>
-auto csrGraph(const size_t *xv, const K *xd, const K *xe, const V *xw, size_t N) {
+inline auto csrGraph(const size_t *xv, const K *xd, const K *xe, const V *xw, size_t N) {
   OutDiGraph<K, None, V> a; csrGraphW(a, xv, xd, xe, xw, N);
   return a;
 }
 template <class K, class V>
-auto csrGraph(const vector<size_t>& xv, const vector<K>& xd, const vector<K>& xe, const vector<V>& xw) {
+inline auto csrGraph(const vector<size_t>& xv, const vector<K>& xd, const vector<K>& xe, const vector<V>& xw) {
   OutDiGraph<K, None, V> a; csrGraphW(a, xv, xd, xe, xw);
   return a;
 }
 template <class K>
-auto csrGraph(const vector<size_t>& xv, const vector<K>& xe) {
+inline auto csrGraph(const vector<size_t>& xv, const vector<K>& xe) {
   OutDiGraph<K> a; csrGraphW(a, xv, xe);
   return a;
 }
@@ -164,7 +164,7 @@ auto csrGraph(const vector<size_t>& xv, const vector<K>& xe) {
 // -------------------
 
 template <class K, class V, class A=double>
-A csrSumEdgeValues(const size_t *xv, const K *xd, const V *xw, size_t N, A a=A()) {
+inline A csrSumEdgeValues(const size_t *xv, const K *xd, const V *xw, size_t N, A a=A()) {
   for (size_t u=0; u<N; ++u) {
     size_t OFF = xv[u];
     size_t DEG = xd? xd[u] : xv[u+1] - xv[u];

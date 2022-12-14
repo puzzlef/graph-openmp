@@ -1,4 +1,5 @@
 #pragma once
+#include <ctime>
 #include <type_traits>
 #include <utility>
 #include <iterator>
@@ -6,6 +7,7 @@
 #include <vector>
 #include <ostream>
 #include <iostream>
+#include <chrono>
 
 using std::pair;
 using std::array;
@@ -13,6 +15,11 @@ using std::vector;
 using std::ostream;
 using std::is_fundamental;
 using std::iterator_traits;
+using std::time_t;
+using std::tm;
+using std::localtime;
+using std::chrono::time_point;
+using std::chrono::system_clock;
 using std::cout;
 
 
@@ -22,7 +29,7 @@ using std::cout;
 // -----
 
 template <class I>
-void write_values(ostream& a, I ib, I ie) {
+inline void write_values(ostream& a, I ib, I ie) {
   using T = typename iterator_traits<I>::value_type;
   if (is_fundamental<T>::value) {
     a << "{";
@@ -66,6 +73,37 @@ inline ostream& operator<<(ostream& a, const array<T, N>& x) {
 template <class T>
 inline ostream& operator<<(ostream& a, const vector<T>& x) {
   write(a, x); return a;
+}
+
+
+
+
+// WRITE TIME
+// ----------
+
+inline void writeTime(ostream& a, const time_t& x) {
+  const int BUF = 32;
+  char  buf[BUF];
+  tm* t = localtime(&x);
+  snprintf(buf, BUF, "%04d-%02d-%02d %02d:%02d:%02d",
+    t->tm_year + 1900,
+    t->tm_mon,
+    t->tm_mday,
+    t->tm_hour,
+    t->tm_min,
+    t->tm_sec
+  );
+  a << buf;
+}
+inline void writeTimePoint(ostream& a, const time_point<system_clock>& x) {
+  writeTime(a, system_clock::to_time_t(x));
+}
+
+inline ostream& operator<<(ostream& a, const time_t& x) {
+  writeTime(a, x); return a;
+}
+inline ostream& operator<<(ostream& a, const time_point<system_clock>& x) {
+  writeTimePoint(a, x); return a;
 }
 
 

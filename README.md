@@ -1,16 +1,6 @@
 Comparing static vs dynamic approaches of OpenMP-based [Louvain algorithm]
 for [community detection].
 
-`TODO`
-
-- Improve performance of `set_difference_inplace()`
-- Improve performance of `set_union_inplace()`
-- Use `uint32_t` as default key type.
-- Use separate bitsets for edge insertions and deletions.
-- Parallelize correction of edges in Graph.
-- Parallelize parsing of edges from MTX file.
-- Use `LOG()` to output current time at start of print line.
-
 [Louvain] is an algorithm for **detecting communities in graphs**. *Community*
 *detection* helps us understand the *natural divisions in a network* in an
 **unsupervised manner**. It is used in **e-commerce** for *customer*

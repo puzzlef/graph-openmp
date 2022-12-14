@@ -76,7 +76,7 @@ inline void readMtxW(G& a, istream& s) {
   PERFORMI( float dvertices = duration(t0, t1) );
   PERFORMI( float dedges    = duration(t1, t2) );
   PERFORMI( float dupdate   = duration(t2, t3) );
-  PRINTFI("readMtxW(): vertices=%.1fms, edges=%.1fms, update=%.1fms\n", dvertices, dedges, dupdate);
+  LOGI("readMtxW(): vertices=%.1fms, edges=%.1fms, update=%.1fms\n", dvertices, dedges, dupdate);
 }
 template <class G>
 inline void readMtxW(G& a, const char *pth) {
@@ -151,7 +151,7 @@ inline void readMtxOmpW(G& a, istream& s) {
   PERFORMI( auto t7 = timeNow() );
   PERFORMI( float dvertices = duration(t0, t1) );
   PERFORMI( float dupdate   = duration(t6, t7) );
-  PRINTFI("readMtxOmpW(): vertices=%.1fms, read=%.1fms, parse=%.1fms, edges=%.1fms, update=%.1fms\n", dvertices, dread, dparse, dedges, dupdate);
+  LOGI("readMtxOmpW(): vertices=%.1fms, read=%.1fms, parse=%.1fms, edges=%.1fms, update=%.1fms\n", dvertices, dread, dparse, dedges, dupdate);
 }
 template <class G>
 inline void readMtxOmpW(G& a, const char *pth) {

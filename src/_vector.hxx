@@ -34,14 +34,14 @@ inline size_t size(const vector<T>& x) {
 // -------------
 
 template <class T, class J, class TA, class FM>
-void gatherValues(const T *x, const J& is, TA *a, FM fm) {
+inline void gatherValues(const T *x, const J& is, TA *a, FM fm) {
   ASSERT(x && a);
   size_t j = 0;
   for (auto i : is)
     a[j++] = TA(fm(x[i]));
 }
 template <class T, class J, class TA>
-void gatherValues(const T *x, const J& is, TA *a) {
+inline void gatherValues(const T *x, const J& is, TA *a) {
   ASSERT(x && a);
   auto fm = [](auto v) { return v; };
   gatherValues(x, is, a, fm);
@@ -81,14 +81,14 @@ inline void gatherValuesW(vector<TA>& a, const vector<T>& x, const J& is) {
 // --------------
 
 template <class T, class J, class TA, class FM>
-void scatterValues(const T *x, const J& is, TA *a, FM fm) {
+inline void scatterValues(const T *x, const J& is, TA *a, FM fm) {
   ASSERT(x && a);
   size_t j = 0;
   for (auto i : is)
     a[i] = fm(x[j++]);
 }
 template <class T, class J, class TA>
-void scatterValues(const T *x, const J& is, TA *a) {
+inline void scatterValues(const T *x, const J& is, TA *a) {
   ASSERT(x && a);
   auto fm = [](auto v) { return v; };
   scatterValues(x, is, a, fm);
@@ -128,7 +128,7 @@ inline void scatterValuesW(vector<TA>& a, const vector<T>& x, const J& is) {
 // -----------
 
 template <class T, class TA>
-size_t copyValues(const T *x, TA *a, size_t N) {
+inline size_t copyValues(const T *x, TA *a, size_t N) {
   ASSERT(x && a);
   for (size_t i=0; i<N; ++i)
     a[i] = x[i];
@@ -150,7 +150,7 @@ inline size_t copyValues(const vector<T>& x, vector<TA>& a, size_t i, size_t N) 
 // ----------
 
 template <class T, class V>
-void fillValueU(T *a, size_t N, const V& v) {
+inline void fillValueU(T *a, size_t N, const V& v) {
   ASSERT(a);
   fill(a, a+N, v);
 }

@@ -30,13 +30,13 @@ int main(int argc, char **argv) {
   bool sym   = argc>2? stoi(argv[2]) : false;
   int repeat = argc>3? stoi(argv[3]) : 5;
   OutDiGraph<K, None, V> x, y;  // V w = 1;
-  printf("Loading graph %s ...\n", file);
+  LOG("Loading graph %s ...\n", file);
   omp_set_num_threads(MAX_THREADS);
-  printf("OMP_NUM_THREADS=%d\n", MAX_THREADS);
+  LOG("OMP_NUM_THREADS=%d\n", MAX_THREADS);
   // float tx = measureDuration([&]() { readMtxW(x, file); });
   // println(x); printf("[%09.3f ms] readMtxW\n", tx); x.clear();
   float ty = measureDuration([&]() { readMtxOmpW(y, file); });
-  println(y); printf("[%09.3f ms] readMtxOmpW\n", ty); y.clear();
+  LOG(""); println(y); LOG("[%09.3f ms] readMtxOmpW\n", ty); y.clear();
   printf("\n");
   return 0;
 }

@@ -47,7 +47,7 @@ inline auto deadEndCount(const G& x) {
 // Vertices that can become dead ends if existing ones are removed.
 
 template <class G, class F>
-auto recursiveDeadEndsForEach(const G& x, F fn) {
+inline auto recursiveDeadEndsForEach(const G& x, F fn) {
   using K = typename G::key_type;
   unordered_set<K> a; size_t N = 0;
   deadEndsForEach(x, [&](auto u) { a.insert(u); fn(u); });

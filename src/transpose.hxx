@@ -49,7 +49,7 @@ inline auto transposeOmp(const G& x) {
 // ---------------------
 
 template <class H, class G>
-void transposeWithDegreeW(H& a, const G& x) {
+inline void transposeWithDegreeW(H& a, const G& x) {
   x.reserve(x.span());
   x.forEachVertexKey([&](auto u) { a.addVertex(u, x.degree(u)); });
   x.forEachVertexKey([&](auto u) {
@@ -58,7 +58,7 @@ void transposeWithDegreeW(H& a, const G& x) {
   a.update();
 }
 template <class G>
-auto transposeWithDegree(const G& x) {
+inline auto transposeWithDegree(const G& x) {
   using K = typename G::key_type;
   using H = decltype(retype(x, K(), K()));
   H a; transposeWithDegreeW(a, x);
@@ -67,7 +67,7 @@ auto transposeWithDegree(const G& x) {
 
 
 template <class H, class G>
-void transposeWithDegreeOmpW(H& a, const G& x) {
+inline void transposeWithDegreeOmpW(H& a, const G& x) {
   x.reserve(x.span());
   x.forEachVertexKey([&](auto u) { a.addVertex(u, x.degree(u)); });
   #pragma omp parallel
@@ -79,7 +79,7 @@ void transposeWithDegreeOmpW(H& a, const G& x) {
   updateOmpU(a);
 }
 template <class G>
-auto transposeWithDegreeOmp(const G& x) {
+inline auto transposeWithDegreeOmp(const G& x) {
   using K = typename G::key_type;
   using H = decltype(retype(x, K(), K()));
   H a; transposeWithDegreeOmpW(a, x);
