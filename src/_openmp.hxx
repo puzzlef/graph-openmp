@@ -36,7 +36,7 @@ inline void gatherValuesOmpW(TA *a, const TX *x, const IS& is, FM fm) {
   ASSERT(a && x);
   size_t N = is.size();
   #pragma omp parallel for schedule(auto)
-  for (size_t j=0; n<N; ++j)
+  for (size_t j=0; j<N; ++j)
     a[j] = TA(fm(x[is[j]]));
 }
 template <class TA, class TX, class IS>
@@ -146,7 +146,7 @@ inline void multiplyValuesOmpW(vector<TA>& a, const vector<TX>& x, const vector<
 // -------
 
 template <class TX, class TA=TX>
-inline TA l1NormOmp(const T *x, size_t N, TA a=TA()) {
+inline TA l1NormOmp(const TX *x, size_t N, TA a=TA()) {
   ASSERT(x);
   #pragma omp parallel for schedule(auto)
   for (size_t i=0; i<N; ++i)
@@ -161,7 +161,7 @@ inline TA l1NormOmp(const vector<TX>& x, TA a=TA()) {
 
 
 template <class TX, class TY, class TA=TX>
-inline TA l1NormOmp(const T *x, const T *y, size_t N, TA a=TA()) {
+inline TA l1NormOmp(const TX *x, const TY *y, size_t N, TA a=TA()) {
   ASSERT(x && y);
   #pragma omp parallel for schedule(auto)
   for (size_t i=0; i<N; ++i)
@@ -181,7 +181,7 @@ inline TA l1NormOmp(const vector<TX>& x, const vector<TY>& y, TA a=TA()) {
 // -------
 
 template <class TX, class TA=TX>
-inline TA l2NormOmp(const T *x, size_t N, TA a=TA()) {
+inline TA l2NormOmp(const TX *x, size_t N, TA a=TA()) {
   ASSERT(x);
   #pragma omp parallel for schedule(auto)
   for (size_t i=0; i<N; ++i)
@@ -196,7 +196,7 @@ inline TA l2NormOmp(const vector<TX>& x, TA a=TA()) {
 
 
 template <class TX, class TY, class TA=TX>
-inline TA l2NormOmp(const T *x, const T *y, size_t N, TA a=TA()) {
+inline TA l2NormOmp(const TX *x, const TY *y, size_t N, TA a=TA()) {
   ASSERT(x && y);
   #pragma omp parallel for schedule(auto)
   for (size_t i=0; i<N; ++i)
@@ -216,7 +216,7 @@ inline TA l2NormOmp(const vector<TX>& x, const vector<TY>& y, TA a=TA()) {
 // -------
 
 template <class TX, class TA=TX>
-inline TA liNormOmp(const T *x, size_t N, TA a=TA()) {
+inline TA liNormOmp(const TX *x, size_t N, TA a=TA()) {
   ASSERT(x);
   #pragma omp parallel for schedule(auto)
   for (size_t i=0; i<N; ++i)
@@ -231,7 +231,7 @@ inline TA liNormOmp(const vector<TX>& x, TA a=TA()) {
 
 
 template <class TX, class TY, class TA=TX>
-inline TA liNormOmp(const T *x, const T *y, size_t N, TA a=TA()) {
+inline TA liNormOmp(const TX *x, const TY *y, size_t N, TA a=TA()) {
   ASSERT(x && y);
   #pragma omp parallel for schedule(auto)
   for (size_t i=0; i<N; ++i)

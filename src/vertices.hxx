@@ -38,6 +38,7 @@ inline auto vertexValues(const G& x) {
 
 template <class G, class KS, class FM>
 inline auto vertexData(const G& x, const KS& ks, FM fm) {
+  using K = typename G::key_type;
   using V = typename G::vertex_value_type;
   using T = remove_reference_t<decltype(fm(K(), V()))>;
   vector<T> a;

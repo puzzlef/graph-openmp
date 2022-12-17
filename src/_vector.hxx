@@ -29,7 +29,7 @@ template <class TA, class TX, class IS, class FM>
 inline void gatherValuesW(TA *a, const TX *x, const IS& is, FM fm) {
   ASSERT(a && x);
   size_t N = is.size();
-  for (size_t j=0; n<N; ++j)
+  for (size_t j=0; j<N; ++j)
     a[j] = TA(fm(x[is[j]]));
 }
 template <class TA, class TX, class IS>
@@ -134,7 +134,7 @@ inline void multiplyValuesW(vector<TA>& a, const vector<TX>& x, const vector<TY>
 // -------
 
 template <class TX, class TA=TX>
-inline TA l1Norm(const T *x, size_t N, TA a=TA()) {
+inline TA l1Norm(const TX *x, size_t N, TA a=TA()) {
   ASSERT(x);
   for (size_t i=0; i<N; ++i)
     a += TA(abs(x[i]));
@@ -148,7 +148,7 @@ inline TA l1Norm(const vector<TX>& x, TA a=TA()) {
 
 
 template <class TX, class TY, class TA=TX>
-inline TA l1Norm(const T *x, const T *y, size_t N, TA a=TA()) {
+inline TA l1Norm(const TX *x, const TY *y, size_t N, TA a=TA()) {
   ASSERT(x && y);
   for (size_t i=0; i<N; ++i)
     a += TA(abs(x[i] - y[i]));
@@ -167,7 +167,7 @@ inline TA l1Norm(const vector<TX>& x, const vector<TY>& y, TA a=TA()) {
 // -------
 
 template <class TX, class TA=TX>
-inline TA l2Norm(const T *x, size_t N, TA a=TA()) {
+inline TA l2Norm(const TX *x, size_t N, TA a=TA()) {
   ASSERT(x);
   for (size_t i=0; i<N; ++i)
     a += TA(x[i]) * TA(x[i]);
@@ -181,7 +181,7 @@ inline TA l2Norm(const vector<TX>& x, TA a=TA()) {
 
 
 template <class TX, class TY, class TA=TX>
-inline TA l2Norm(const T *x, const T *y, size_t N, TA a=TA()) {
+inline TA l2Norm(const TX *x, const TY *y, size_t N, TA a=TA()) {
   ASSERT(x && y);
   for (size_t i=0; i<N; ++i)
     a += TA(x[i] - y[i]) * TA(x[i] - y[i]);
@@ -200,7 +200,7 @@ inline TA l2Norm(const vector<TX>& x, const vector<TY>& y, TA a=TA()) {
 // -------
 
 template <class TX, class TA=TX>
-inline TA liNorm(const T *x, size_t N, TA a=TA()) {
+inline TA liNorm(const TX *x, size_t N, TA a=TA()) {
   ASSERT(x);
   for (size_t i=0; i<N; ++i)
     a = max(a, TA(abs(x[i])));
@@ -214,7 +214,7 @@ inline TA liNorm(const vector<TX>& x, TA a=TA()) {
 
 
 template <class TX, class TY, class TA=TX>
-inline TA liNorm(const T *x, const T *y, size_t N, TA a=TA()) {
+inline TA liNorm(const TX *x, const TY *y, size_t N, TA a=TA()) {
   ASSERT(x && y);
   for (size_t i=0; i<N; ++i)
     a = max(a, TA(abs(x[i] - y[i])));
