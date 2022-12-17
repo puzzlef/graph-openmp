@@ -1,109 +1,64 @@
-Comparing static vs dynamic approaches of OpenMP-based [Louvain algorithm]
-for [community detection].
+[OpenMP]-based parallel graph implementation.
 
-[Louvain] is an algorithm for **detecting communities in graphs**. *Community*
-*detection* helps us understand the *natural divisions in a network* in an
-**unsupervised manner**. It is used in **e-commerce** for *customer*
-*segmentation* and *advertising*, in **communication networks** for *multicast*
-*routing* and setting up of *mobile networks*, and in **healthcare** for
-*epidemic causality*, setting up *health programmes*, and *fraud detection* is
-hospitals. *Community detection* is an **NP-hard** problem, but heuristics exist
-to solve it (such as this). **Louvain algorithm** is an **agglomerative-hierarchical**
-community detection method that **greedily optimizes** for **modularity**
-(**iteratively**).
+I have been trying to parallelize the graph data structure from bottom up.
+- Each vertex has a **list of edges**, which is a **sorted vector of pairs** of *edge id* and *weight*.
+- A sorted list has better locality, lookup, and update time.
+- To amortize cost of edge deletions and insertions, they are *simply queued up* and lazily updated.
+- *Either* a batch of deletions *or* insertions must be done at a time to use lazy behaviour (not a mix).
+- The lazy update is done manually by calling `update()` with a temporary per-thread buffer.
+- The buffer is needed to do an *in-place* `set_union_last_unique()` / `set_difference_unique()`.
+- Different threads must work on *different* vertices.
 
-**Modularity** is a score that measures *relative density of edges inside* vs
-*outside* communities. Its value lies between `−0.5` (*non-modular clustering*)
-and `1.0` (*fully modular clustering*). Optimizing for modularity *theoretically*
-results in the best possible grouping of nodes in a graph.
+[![](https://i.imgur.com/Jp1UDS5.png)][sheetp]
+[![](https://i.imgur.com/7lA6tWb.png)][sheetp]
+[![](https://i.imgur.com/170NBzh.png)][sheetp]
+[![](https://i.imgur.com/rdyR5Uo.png)][sheetp]
 
-Given an *undirected weighted graph*, all vertices are first considered to be
-*their own communities*. In the **first phase**, each vertex greedily decides to
-move to the community of one of its neighbors which gives greatest increase in
-modularity. If moving to no neighbor's community leads to an increase in
-modularity, the vertex chooses to stay with its own community. This is done
-sequentially for all the vertices. If the total change in modularity is more
-than a certain threshold, this phase is repeated. Once this **local-moving**
-**phase** is complete, all vertices have formed their first hierarchy of
-communities. The **next phase** is called the **aggregation phase**, where all
-the *vertices belonging to a community* are *collapsed* into a single
-**super-vertex**, such that edges between communities are represented as edges
-between respective super-vertices (edge weights are combined), and edges within
-each community are represented as self-loops in respective super-vertices
-(again, edge weights are combined). Together, the local-moving and the
-aggregation phases constitute a **pass**. This super-vertex graph is then used
-as input for the next pass. This process continues until the increase in
-modularity is below a certain threshold. As a result from each pass, we have a
-*hierarchy of community memberships* for each vertex as a **dendrogram**. We
-generally consider the *top-level hierarchy* as the *final result* of community
-detection process.
+<br>
 
-*Louvain* algorithm is a hierarchical algorithm, and thus has two different
-tolerance parameters: `tolerance` and `passTolerance`. **tolerance** defines the
-minimum amount of increase in modularity expected, until the local-moving phase
-of the algorithm is considered to have converged. We compare the increase in
-modularity in each iteration of the local-moving phase to see if it is below
-`tolerance`. **passTolerance** defines the minimum amount of increase in
-modularity expected, until the entire algorithm is considered to have converged.
-We compare the increase in modularity across all iterations of the local-moving
-phase in the current pass to see if it is below `passTolerance`. `passTolerance`
-is normally set to `0` (we want to maximize our modularity gain), but the same
-thing does not apply for `tolerance`. Adjusting values of `tolerance` between
-each pass have been observed to impact the runtime of the algorithm, without
-significantly affecting the modularity of obtained communities. In this
-experiment, we compare the performance of *three different types* of OpenMP-based
-**dynamic Louvain** with respect to the *static* version. We also compare with
-sequential static approach.
+The last time i tried parallelizing graph reading with 12 threads, performance
+as 1/2 that of sequential, with converting each line to numbers taking the most
+time. It seems that the default stream operator (`>>`) uses locks for some
+reason to support locales, and is not recommended to use in parallel code.
 
-**Naive dynamic**:
-- We start with previous community membership of each vertex (instead of each vertex its own community).
+[![](https://i.imgur.com/WgPl7nr.png)][sheetp]
 
-**Delta screening**:
-- All edge batches are undirected, and sorted by source vertex-id.
-- For edge additions across communities with source vertex `i` and highest modularity changing edge vertex `j*`,
-  `i`'s neighbors and `j*`'s community is marked as affected.
-- For edge deletions within the same community `i` and `j`,
-  `i`'s neighbors and `j`'s community is marked as affected.
+<br>
 
-**Frontier-based**:
-- All source and destination vertices are marked as affected for insertions and deletions.
-- For edge additions across communities with source vertex `i` and destination vertex `j`,
-  `i` is marked as affected.
-- For edge deletions within the same community `i` and `j`,
-  `i` is marked as affected.
-- Vertices whose communities change in local-moving phase have their neighbors marked as affected.
+I switched to using `strtoull()` and `strtod()` for the conversion, switched to
+`istringstream` from `stringstream`, and parallelized edge addition into the
+graph (along with parallel update). On `web-Google` graph we are now getting a
+speedup of **~6x** for graph loading. I now log system date and time for
+detecting any more bottlenecks. The parallel edge update is as follows. Only one
+of the 12 threads will add the edge to the graph if the source vertex belongs to
+its chunk.
 
-First, we compute the community membership of each vertex using the static
-Louvain algorithm. We then generate *batches* of *insertions (+)* and
-*deletions (-)* of edges of sizes 500, 1000, 5000, ... 100000. For each batch
-size, we generate *five* different batches for the purpose of *averaging*. Each
-batch of edges (insertion / deletion) is generated randomly such that the
-selection of each vertex (as endpoint) is *equally probable*. We choose the
-Louvain *parameters* as `resolution = 1.0`, `tolerance = 1e-2` (for local-moving
-phase) with *tolerance* decreasing after every pass by a factor of
-`toleranceDeclineFactor = 10`, and a `passTolerance = 0.0` (when passes stop).
-In addition we limit the maximum number of iterations in a single local-moving
-phase with `maxIterations = 500`, and limit the maximum number of passes with
-`maxPasses = 500`. We run the Louvain algorithm until convergence (or until the
-maximum limits are exceeded), and measure the **time taken** for the
-*computation* (performed 5 times for averaging), the **modularity score**, the
-**total number of iterations** (in the *local-moving phase*), and the number
-of **passes**. This is repeated for *seventeen* different graphs.
+[![](https://i.imgur.com/ONf0uPi.png)][sheetp]
+[![](https://i.imgur.com/EBCyi5u.png)][sheetp]
+[![](https://i.imgur.com/lB8xouh.png)][sheetp]
+[![](https://i.imgur.com/pMRwmIa.png)][sheetp]
+[![](https://i.imgur.com/VJMyves.png)][sheetp]
 
-From the results, we make make the following observations. The frontier-based
-dynamic approach converges the fastest, which obtaining communities with only
-slightly lower modularity than other approaches. We also observe that
-delta-screening based dynamic Louvain algorithm has the same performance as that
-of the naive dynamic approach. Therefore, **frontier-based dynamic Louvain**
-would be the **best choice**. However, one of the most interesting things we
-note is that sequential static approach is only slightly slower than
-OpenMP-based approach with 12 threads. This is indeed suprising, and is likely
-due to higher pressure on cache coherence system as well as the algorithm
-becoming closes to an unordered approach, which is inherently slower than an
-ordered approach. Trying to avoid community swaps with OpenMP-based approach
-does not seem to improve performance by any significant amount. However, it is
-possible that if unordered approach is used with OpenMP, then its performance
-may be a bit better.
+<br>
+
+Graph functions such as `symmetricize()` are now simply parallelized as below.
+
+[![](https://i.imgur.com/tJNoNYO.png)][sheetp]
+
+<br>
+
+We are able to load graphs with more that *4 billion edges* in under **10**
+**minutes**. Most of the time spent is loading the graph is the time needed to
+*read the file*, and *add edges to the graph data structure*. We get a net
+loading rate of about **10 million edges per second**. *Updating the graph*,
+which involves sorting the edges of each vertex while picking only the last
+unique entry, is about *50 times faster*.
+
+[![](https://i.imgur.com/9FIflvU.png)][sheetp]
+[![](https://i.imgur.com/PSALt0j.png)][sheetp]
+[![](https://i.imgur.com/bkqzHLa.png)][sheetp]
+
+<br>
 
 All outputs are saved in a [gist] and a small part of the output is listed here.
 Some [charts] are also included below, generated from [sheets]. The input data
@@ -112,64 +67,30 @@ This experiment was done with guidance from [Prof. Kishore Kothapalli] and
 [Prof. Dip Sankar Banerjee].
 
 
-[Louvain algorithm]: https://en.wikipedia.org/wiki/Louvain_method
-[community detection]: https://en.wikipedia.org/wiki/Community_search
+[OpenMP]: https://www.openmp.org
 
 <br>
 
 ```bash
 $ g++ -std=c++17 -O3 main.cxx
-$ ./a.out ~/data/web-Stanford.mtx
-$ ./a.out ~/data/web-BerkStan.mtx
+$ ./a.out ~/Data/GAP-road.mtx
+$ ./a.out ~/Data/GAP-twitter.mtx
 $ ...
 
-# Loading graph /home/subhajit/data/web-Stanford.mtx ...
-# order: 281903 size: 2312497 [directed] {}
-# order: 281903 size: 3985272 [directed] {} (symmetricize)
-# OMP_NUM_THREADS=12
-# [-0.000497 modularity] noop
-# [0e+00 batch_size; 00440.006 ms; 0025 iters.; 009 passes; 0.923382580 modularity] louvainSeqStatic
-# [5e+02 batch_size; 00394.563 ms; 0027 iters.; 009 passes; 0.923351705 modularity] louvainSeqStatic
-# [5e+02 batch_size; 00278.041 ms; 0030 iters.; 009 passes; 0.927210510 modularity] louvainOmpStatic
-# [5e+02 batch_size; 00101.633 ms; 0003 iters.; 003 passes; 0.914556682 modularity] louvainOmpNaiveDynamic
-# [5e+02 batch_size; 00107.587 ms; 0004 iters.; 004 passes; 0.914944172 modularity] louvainOmpDynamicDeltaScreening
-# [5e+02 batch_size; 00088.939 ms; 0003 iters.; 003 passes; 0.913411736 modularity] louvainOmpDynamicFrontier
-# ...
-# [1e+05 batch_size; 00552.708 ms; 0019 iters.; 006 passes; 0.925986648 modularity] louvainSeqStatic
-# [1e+05 batch_size; 00321.840 ms; 0026 iters.; 005 passes; 0.925740898 modularity] louvainOmpStatic
-# [1e+05 batch_size; 00130.201 ms; 0010 iters.; 004 passes; 0.912258267 modularity] louvainOmpNaiveDynamic
-# [1e+05 batch_size; 00115.326 ms; 0002 iters.; 002 passes; 0.912238598 modularity] louvainOmpDynamicDeltaScreening
-# [1e+05 batch_size; 00117.582 ms; 0010 iters.; 004 passes; 0.911141872 modularity] louvainOmpDynamicFrontier
-# [-5e+02 batch_size; 00389.191 ms; 0024 iters.; 008 passes; 0.923092246 modularity] louvainSeqStatic
-# [-5e+02 batch_size; 00286.037 ms; 0026 iters.; 008 passes; 0.926223278 modularity] louvainOmpStatic
-# [-5e+02 batch_size; 00106.936 ms; 0004 iters.; 004 passes; 0.914734781 modularity] louvainOmpNaiveDynamic
-# [-5e+02 batch_size; 00110.743 ms; 0004 iters.; 004 passes; 0.914734781 modularity] louvainOmpDynamicDeltaScreening
-# [-5e+02 batch_size; 00073.786 ms; 0002 iters.; 002 passes; 0.913197339 modularity] louvainOmpDynamicFrontier
-# ...
-# [-1e+05 batch_size; 00471.004 ms; 0018 iters.; 006 passes; 0.881129861 modularity] louvainSeqStatic
-# [-1e+05 batch_size; 00387.020 ms; 0017 iters.; 006 passes; 0.877473772 modularity] louvainOmpStatic
-# [-1e+05 batch_size; 00115.070 ms; 0004 iters.; 004 passes; 0.869384587 modularity] louvainOmpNaiveDynamic
-# [-1e+05 batch_size; 00106.264 ms; 0004 iters.; 004 passes; 0.869384587 modularity] louvainOmpDynamicDeltaScreening
-# [-1e+05 batch_size; 00099.210 ms; 0004 iters.; 004 passes; 0.868384838 modularity] louvainOmpDynamicFrontier
+# 2022-12-17 21:04:36 Loading graph /home/subhajit/Data/GAP-road.mtx ...
+# 2022-12-17 21:04:36 OMP_NUM_THREADS=24
+# 2022-12-17 21:04:42 readMtxOmpW(): vertices=269.8ms, read=3173.7ms, parse=218.2ms, edges=2290.6ms, update=193.3ms
+# 2022-12-17 21:04:42 order: 23947347 size: 57708624 [directed] {}
+# 2022-12-17 21:04:42 [06160.472 ms] readMtxOmpW
 #
-# Loading graph /home/subhajit/data/web-BerkStan.mtx ...
-# order: 685230 size: 7600595 [directed] {}
-# order: 685230 size: 13298940 [directed] {} (symmetricize)
-# OMP_NUM_THREADS=12
-# [-0.000316 modularity] noop
-# [0e+00 batch_size; 00735.782 ms; 0028 iters.; 009 passes; 0.935839474 modularity] louvainSeqStatic
-# [5e+02 batch_size; 00741.732 ms; 0027 iters.; 009 passes; 0.937690854 modularity] louvainSeqStatic
-# [5e+02 batch_size; 00655.410 ms; 0028 iters.; 009 passes; 0.935854971 modularity] louvainOmpStatic
-# [5e+02 batch_size; 00216.361 ms; 0003 iters.; 003 passes; 0.932617486 modularity] louvainOmpNaiveDynamic
-# [5e+02 batch_size; 00246.924 ms; 0003 iters.; 003 passes; 0.932617486 modularity] louvainOmpDynamicDeltaScreening
-# [5e+02 batch_size; 00186.971 ms; 0004 iters.; 004 passes; 0.932644546 modularity] louvainOmpDynamicFrontier
+# 2022-12-17 21:04:43 Loading graph /home/subhajit/Data/GAP-twitter.mtx ...
+# 2022-12-17 21:04:43 OMP_NUM_THREADS=24
+# 2022-12-17 21:08:07 readMtxOmpW(): vertices=711.1ms, read=138848.7ms, parse=10906.0ms, edges=50429.3ms, update=3494.1ms
+# 2022-12-17 21:08:07 order: 61578415 size: 1468364884 [directed] {}
+# 2022-12-17 21:08:07 [204464.219 ms] readMtxOmpW
+#
 # ...
 ```
-
-[![](https://i.imgur.com/wWKwFR7.png)][sheetp]
-[![](https://i.imgur.com/hSJblRu.png)][sheetp]
-[![](https://i.imgur.com/l1jvNsh.png)][sheetp]
-[![](https://i.imgur.com/9cdKCG6.png)][sheetp]
 
 <br>
 <br>
@@ -177,26 +98,36 @@ $ ...
 
 ## References
 
-- [Fast unfolding of communities in large networks; Vincent D. Blondel et al. (2008)](https://arxiv.org/abs/0803.0476)
-- [Community Detection on the GPU; Md. Naim et al. (2017)](https://arxiv.org/abs/1305.2006)
-- [Scalable Static and Dynamic Community Detection Using Grappolo; Mahantesh Halappanavar et al. (2017)](https://ieeexplore.ieee.org/document/8091047)
-- [From Louvain to Leiden: guaranteeing well-connected communities; V.A. Traag et al. (2019)](https://www.nature.com/articles/s41598-019-41695-z)
-- [CS224W: Machine Learning with Graphs | Louvain Algorithm; Jure Leskovec (2021)](https://www.youtube.com/watch?v=0zuiLBOIcsw)
+- [How can I convert a std::string to int?](https://stackoverflow.com/a/7664227/1413259)
+- [Fastest way to read numerical values from text file in C++ (double in this case)](https://stackoverflow.com/a/5678975/1413259)
+- [What's the difference between istringstream, ostringstream and stringstream? / Why not use stringstream in every case?](https://stackoverflow.com/a/3292168/1413259)
+- [c++ stringstream is too slow, how to speed up?](https://stackoverflow.com/a/5830907/1413259)
+- [Best Approach to read huge files utilizing multithreading; Stephan van Hulst :: Coderanch](https://coderanch.com/t/699934/java/Approach-read-huge-files-utilizing)
+- [How to get current time and date in C++?](https://stackoverflow.com/a/997988/1413259)
+- [Signed variant of size_t in standard C++ library](https://stackoverflow.com/q/65496071/1413259)
+- [Is 'signed size_t' different from 'ssize_t'?](https://stackoverflow.com/q/20744349/1413259)
+- [How to create a temporary directory?](https://stackoverflow.com/a/4632032/1413259)
+- [How to amend a commit without changing commit message (reusing the previous one)?](https://stackoverflow.com/a/10365442/1413259)
+- [Syntax for a single-line while loop in Bash](https://stackoverflow.com/a/1289029/1413259)
+- [How can I save username and password in Git?](https://stackoverflow.com/a/35942890/1413259)
+- [How do I tell git to use fewer cores/threads when compressing?](https://superuser.com/a/539478/305990)
+- [Containers library :: cppreference](https://en.cppreference.com/w/cpp/container)
+- [Date and time utilities :: cppreference](https://en.cppreference.com/w/cpp/chrono)
+- [Standard library header &lt;string&gt; :: cppreference](https://en.cppreference.com/w/cpp/header/string)
+- [Standard library header &lt;algorithm&gt; :: cppreference](https://en.cppreference.com/w/cpp/header/algorithm)
 - [The University of Florida Sparse Matrix Collection; Timothy A. Davis et al. (2011)](https://doi.org/10.1145/2049662.2049663)
 
 <br>
 <br>
 
-[![](https://i.imgur.com/UGB0g2L.jpg)](https://www.youtube.com/watch?v=pIF3wOet-zw)<br>
+[![](https://i.imgur.com/LWJP5Hy.jpg)](https://www.youtube.com/watch?v=iHsqqgvwUxk)<br>
 [![ORG](https://img.shields.io/badge/org-ionicf-green?logo=Org)](https://ionicf.github.io)
-[![DOI](https://zenodo.org/badge/540003159.svg)](https://zenodo.org/badge/latestdoi/540003159)
 
 
 [Prof. Dip Sankar Banerjee]: https://sites.google.com/site/dipsankarban/
 [Prof. Kishore Kothapalli]: https://faculty.iiit.ac.in/~kkishore/
 [SuiteSparse Matrix Collection]: https://sparse.tamu.edu
-[Louvain]: https://en.wikipedia.org/wiki/Louvain_method
-[gist]: https://gist.github.com/wolfram77/3f9d0452901d3719d0e0baf345615c91
-[charts]: https://imgur.com/a/VsGTNg4
-[sheets]: https://docs.google.com/spreadsheets/d/13GMWmhcw5EbCVgVVtP08yQQrpQmE_EIyhNGb0MzEPX8/edit?usp=sharing
-[sheetp]: https://docs.google.com/spreadsheets/d/e/2PACX-1vR_oG_LC7Nuy3B8dlM1SUM4UeCpB946foX7cvBxeYs8YZHS0h76thPjQU5kI_shiSvD7FjbppNT4-G1/pubhtml
+[gist]: https://gist.github.com/wolfram77/1b2c4f07a1dc46a330b1dc14afa2b4ab
+[charts]: https://imgur.com/a/94omat4
+[sheets]: https://docs.google.com/spreadsheets/d/16M2A3ucmqjSr1JL-WWnT-_h3Edggsk_-MvT2MALfHPs/edit?usp=sharing
+[sheetp]: https://docs.google.com/spreadsheets/d/e/2PACX-1vToyQvdBJF-sc9QZ8X2cL6udirwEhWmQnusLT6HgtxYkdRnwrcoJoMDpwC0RMh1Dzh5a4cdrmkDMlRg/pubhtml
