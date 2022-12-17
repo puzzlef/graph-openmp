@@ -17,7 +17,7 @@ using namespace std;
 #endif
 // You can define number of threads with -DMAX_THREADS=...
 #ifndef MAX_THREADS
-#define MAX_THREADS 12
+#define MAX_THREADS 24
 #endif
 
 
