@@ -27,54 +27,28 @@ inline auto vertexKeys(const G& x) {
 
 template <class G>
 inline auto vertexValues(const G& x) {
-  return copyVector(x.vertexValues());
+  return copyVector(x.vertexKeys());
 }
 
 
 
 
-// VERTEX DEGREES
-// --------------
-
-template <class G, class KS, class FM>
-inline auto vertexDegrees(const G& x, const KS& ks, FM fm) {
-  using K = typename G::key_type;
-  using T = remove_reference_t<decltype(fm(K(), K()))>;
-  vector<T> a;
-  for (auto u : ks)
-    a.push_back(fm(u, x.degree(u)));
-  return a;
-}
-template <class G, class KS>
-inline auto vertexDegrees(const G& x, const KS& ks) {
-  auto fm = [](auto u, auto d) { return d; };
-  return vertexDegrees(x, ks, fm);
-}
-template <class G>
-inline auto vertexDegrees(const G& x) {
-  return vertexDegrees(x, x.vertexKeys());
-}
-
-
-
-
-// VERTEX DATA
-// -----------
+// VERTEX VALUES
+// -------------
 
 template <class G, class KS, class FM>
 inline auto vertexData(const G& x, const KS& ks, FM fm) {
-  using K = typename G::key_type;
   using V = typename G::vertex_value_type;
   using T = remove_reference_t<decltype(fm(K(), V()))>;
   vector<T> a;
-  for (auto u : ks)
+  for (K u : ks)
     a.push_back(fm(u, x.vertexValue(u)));
   return a;
 }
 template <class G, class KS>
 inline auto vertexData(const G& x, const KS& ks) {
-  auto fm = [&](auto u, auto d) { return d; };
-  return vertexData(x, ks, fm);
+  auto fm = [](auto u, auto d) { return d; };
+  return vertexData(x, ks);
 }
 template <class G>
 inline auto vertexData(const G& x) {
@@ -191,20 +165,4 @@ inline auto compressKeyContainer(const G& x, const vector<K>& vs, const KS& ks) 
 template <class G, class K>
 inline auto compressKeyContainer(const G& x, const vector<K>& vs) {
   return compressKeyContainer(x, vs, x.vertexKeys());
-}
-
-
-
-
-// VERTICES EQUAL
-// --------------
-
-template <class G, class K>
-inline bool verticesEqual(const G& x, K u, const G& y, K v) {
-  if (x.degree(u) != y.degree(v)) return false;
-  return equalValues(x.edgeKeys(u), y.edgeKeys(v));
-}
-template <class G, class H, class K>
-inline bool verticesEqual(const G& x, const H& xt, K u, const G& y, const H& yt, K v) {
-  return verticesEqual(x, u, y, u) && verticesEqual(xt, u, yt, u);
 }

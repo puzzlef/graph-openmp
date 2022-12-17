@@ -14,6 +14,10 @@ using std::vector;
 // --------
 // Add an edge (in parallel).
 
+template <class G, class K, class E, class FT>
+inline void addEdgeU(G &a, K u, K v, E w, FT ft) {
+  a.addEdge(u, v, w, ft);
+}
 template <class G, class K, class E>
 inline void addEdgeU(G& a, K u, K v, E w=E()) {
   a.addEdge(u, v, w);
@@ -21,7 +25,30 @@ inline void addEdgeU(G& a, K u, K v, E w=E()) {
 
 template <class G, class K, class E>
 inline void addEdgeOmpU(G& a, K u, K v, E w=E()) {
-  if (belongsOmp(u)) a.addEdge(u, v, w);
+  auto ft = [](K u) { return belongsOmp(u); };
+  a.addEdge(u, v, w, ft);
+}
+
+
+
+
+// REMOVE EDGE
+// -----------
+// Remove an edge (in parallel).
+
+template <class G, class K, class FT>
+inline void removeEdgeU(G &a, K u, K v, FT ft) {
+  a.removeEdge(u, v, ft);
+}
+template <class G, class K>
+inline void removeEdgeU(G& a, K u, K v) {
+  a.removeEdge(u, v);
+}
+
+template <class G, class K>
+inline void removeEdgeOmpU(G& a, K u, K v) {
+  auto ft = [](K u) { return belongsOmp(u); };
+  a.removeEdge(u, v, ft);
 }
 
 

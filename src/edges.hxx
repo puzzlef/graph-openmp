@@ -53,7 +53,7 @@ auto edgeData(const G& x, const KS& ks, FM fm) {
 }
 template <class G, class KS>
 inline auto edgeData(const G& x, const KS& ks) {
-  auto fm = [&](auto u, auto v, auto w) { return w; };
+  auto fm = [](auto u, auto v, auto w) { return w; };
   return edgeData(x, ks, fm);
 }
 template <class G>

@@ -133,12 +133,10 @@ inline void readMtxOmpW(G& a, istream& s, bool weighted=false) {
     // Add edges to the graph.
     #pragma omp parallel
     {
-      int T = omp_get_num_threads();
-      int t = omp_get_thread_num();
       for (int i=0; i<READ; ++i) {
         const auto& [u, v, w] = edges[i];
-        if (belongsOmp(u, t, T)) a.addEdge(K(u), K(v), E(w));
-        if (symmetric && belongsOmp(v, t, T)) a.addEdge(K(v), K(u), E(w));
+        addEdgeOmpU(a, K(u), K(v), E(w));
+        if (symmetric) addEdgeOmpU(a, K(v), K(u), E(w));
       }
     }
     PERFORMI( auto t5 = timeNow() );
