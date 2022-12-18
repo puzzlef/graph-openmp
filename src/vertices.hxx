@@ -49,7 +49,7 @@ inline auto vertexData(const G& x, const KS& ks, FM fm) {
 template <class G, class KS>
 inline auto vertexData(const G& x, const KS& ks) {
   auto fm = [](auto u, auto d) { return d; };
-  return vertexData(x, ks);
+  return vertexData(x, ks, fm);
 }
 template <class G>
 inline auto vertexData(const G& x) {

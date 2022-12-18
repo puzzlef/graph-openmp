@@ -2,7 +2,10 @@
 #include <cstdint>
 #include <utility>
 #include <vector>
+
+#ifdef OPENMP
 #include <omp.h>
+#endif
 
 using std::pair;
 using std::vector;
@@ -23,11 +26,14 @@ inline void addEdgeU(G& a, K u, K v, E w=E()) {
   a.addEdge(u, v, w);
 }
 
+
+#ifdef OPENMP
 template <class G, class K, class E>
 inline void addEdgeOmpU(G& a, K u, K v, E w=E()) {
   auto ft = [](K u) { return belongsOmp(u); };
   a.addEdge(u, v, w, ft);
 }
+#endif
 
 
 
@@ -45,11 +51,14 @@ inline void removeEdgeU(G& a, K u, K v) {
   a.removeEdge(u, v);
 }
 
+
+#ifdef OPENMP
 template <class G, class K>
 inline void removeEdgeOmpU(G& a, K u, K v) {
   auto ft = [](K u) { return belongsOmp(u); };
   a.removeEdge(u, v, ft);
 }
+#endif
 
 
 
@@ -63,6 +72,8 @@ inline void updateU(G& a) {
   a.update();
 }
 
+
+#ifdef OPENMP
 template <class G>
 inline void updateOmpU(G& a) {
   using  K = typename G::key_type;
@@ -85,3 +96,4 @@ inline void updateOmpU(G& a) {
   for (int i=0; i<THREADS; ++i)
     delete bufs[i];
 }
+#endif

@@ -6,10 +6,13 @@
 #include <istream>
 #include <sstream>
 #include <fstream>
-#include <omp.h>
 #include "_main.hxx"
 #include "Graph.hxx"
 #include "update.hxx"
+
+#ifdef OPENMP
+#include <omp.h>
+#endif
 
 using std::tuple;
 using std::string;
@@ -85,11 +88,7 @@ inline void readMtxW(G& a, const char *pth, bool weighted=false) {
 }
 
 
-
-
-// READ MTX (OPENMP)
-// -----------------
-
+#ifdef OPENMP
 template <class G>
 inline void readMtxOmpW(G& a, istream& s, bool weighted=false) {
   using K = typename G::key_type;
@@ -156,7 +155,7 @@ inline void readMtxOmpW(G& a, const char *pth, bool weighted=false) {
   ifstream f(pth);
   readMtxOmpW(a, f, weighted);
 }
-
+#endif
 
 
 

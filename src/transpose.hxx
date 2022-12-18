@@ -24,6 +24,7 @@ inline auto transpose(const G& x) {
 }
 
 
+#ifdef OPENMP
 template <class H, class G>
 inline void transposeOmpW(H& a, const G& x) {
   x.reserve(x.span());
@@ -41,7 +42,7 @@ inline auto transposeOmp(const G& x) {
   G a; transposeOmpW(a, x);
   return a;
 }
-
+#endif
 
 
 
@@ -50,7 +51,7 @@ inline auto transposeOmp(const G& x) {
 
 template <class H, class G>
 inline void transposeWithDegreeW(H& a, const G& x) {
-  x.reserve(x.span());
+  a.reserve(x.span());
   x.forEachVertexKey([&](auto u) { a.addVertex(u, x.degree(u)); });
   x.forEachVertexKey([&](auto u) {
     x.forEachEdge(u, [&](auto v, auto w) { a.addEdge(v, u, w); });
@@ -66,6 +67,7 @@ inline auto transposeWithDegree(const G& x) {
 }
 
 
+#ifdef OPENMP
 template <class H, class G>
 inline void transposeWithDegreeOmpW(H& a, const G& x) {
   x.reserve(x.span());
@@ -85,3 +87,4 @@ inline auto transposeWithDegreeOmp(const G& x) {
   H a; transposeWithDegreeOmpW(a, x);
   return a;
 }
+#endif
