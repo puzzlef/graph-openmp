@@ -122,6 +122,7 @@ $ ...
 
 [![](https://i.imgur.com/LWJP5Hy.jpg)](https://www.youtube.com/watch?v=iHsqqgvwUxk)<br>
 [![ORG](https://img.shields.io/badge/org-ionicf-green?logo=Org)](https://ionicf.github.io)
+[![DOI](https://zenodo.org/badge/576609870.svg)](https://zenodo.org/badge/latestdoi/576609870)
 
 
 [Prof. Dip Sankar Banerjee]: https://sites.google.com/site/dipsankarban/
