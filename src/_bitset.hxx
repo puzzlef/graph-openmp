@@ -3,11 +3,11 @@
 #include <utility>
 #include <algorithm>
 #include <vector>
+#include "_ctypes.hxx"
 #include "_queue.hxx"
 
 using std::pair;
 using std::vector;
-#include "_ctypes.hxx"
 using std::lower_bound;
 
 
