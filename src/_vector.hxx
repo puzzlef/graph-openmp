@@ -47,6 +47,13 @@ inline void gatherValuesW(vector<TA>& a, const vector<TX>& x, const IS& is) {
   gatherValuesW(a.data(), x.data(), is);
 }
 
+template <class IS>
+inline void gatherValuesW(vector<bool>& a, const vector<bool>& x, const IS& is) {
+  size_t j = 0;
+  for (auto i : is)
+    a[j++] = x[i];
+}
+
 
 #ifdef OPENMP
 template <class TA, class TX, class IS, class FM>
