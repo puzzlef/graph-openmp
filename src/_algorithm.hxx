@@ -148,31 +148,31 @@ inline auto copyVector(const J& x) {
 
 
 
-// INDICES
-// -------
+// VALUE INDEX
+// -----------
 // Keep the address of each business (yellow pages).
 
 template <class I, class M>
-auto value_indices(I ib, I ie, M& a) {
+auto value_index(I ib, I ie, M& a) {
   size_t i = 0;
   for (; ib != ie; ++ib)
     a[*ib] = i++;
   return a;
 }
 template <class J, class M>
-inline auto valueIndices(const J& x, M& a) {
-  return value_indices(x.begin(), x.end(), a);
+inline auto valueIndex(const J& x, M& a) {
+  return value_index(x.begin(), x.end(), a);
 }
 
 template <class I>
-inline auto value_indices_unordered_map(I ib, I ie) {
+inline auto value_index_unordered_map(I ib, I ie) {
   using K = typename iterator_traits<I>::value_type;
   unordered_map<K, size_t> a;
-  return value_indices(ib, ie, a);
+  return value_index(ib, ie, a);
 }
 template <class J>
-inline auto valueIndicesUnorderedMap(const J& x) {
-  return value_indices_unordered_map(x.begin(), x.end());
+inline auto valueIndexUnorderedMap(const J& x) {
+  return value_index_unordered_map(x.begin(), x.end());
 }
 
 

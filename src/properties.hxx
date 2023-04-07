@@ -44,3 +44,14 @@ inline double edgeWeightOmp(const G& x) {
   }
   return a;
 }
+
+
+
+
+// DEGREES
+// -------
+
+template <class G, class K>
+inline void degreesW(vector<K>& a, const G& x) {
+  x.forEachVertexKey([&](auto u) { a[u] = x.degree(u); });
+}
