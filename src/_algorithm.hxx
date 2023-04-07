@@ -244,18 +244,18 @@ auto set_difference_inplace(IX xb, IX xe, IY yb, IY ye, FL fl, FE fe) {
   }
   // There was a match, remove it.
   IX it = xb++;
-  // Only one elements needs removal.
-  if (xb==xe || yb==ye) return it;
+  // Only one element needs removal.
+  if (xb==xe) return it;
   // With-write loop when there are
   // more elements to remove.
-  do {
+   while (yb!=ye) {
     while (fl(*xb, *yb)) {
       *(it++) = *xb;
       if (++xb==xe) return it;
     }
     if (fe(*xb, *(yb++)))
     { if (++xb==xe) return it; }
-  } while (yb!=ye);
+  }
   // No more elements to remove.
   // Shift the remaining elements.
   return copy(xb, xe, it);
