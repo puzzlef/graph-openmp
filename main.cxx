@@ -11,18 +11,6 @@ using namespace std;
 
 
 
-// You can define datatype with -DTYPE=...
-#ifndef TYPE
-#define TYPE float
-#endif
-// You can define number of threads with -DMAX_THREADS=...
-#ifndef MAX_THREADS
-#define MAX_THREADS 24
-#endif
-
-
-
-
 int main(int argc, char **argv) {
   using K = uint32_t;
   using V = TYPE;
