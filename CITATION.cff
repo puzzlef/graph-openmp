@@ -4,7 +4,7 @@ authors:
   - family-names: Sahu
     given-names: Subhajit
     orcid: https://orcid.org/0000-0001-5140-6578
-title: "ionicf/graph-openmp: OpenMP-based parallel graph implementation"
-version: 1.0.0
-doi: 10.5281/zenodo.7453731
-date-released: 2022-12-18
+title: "puzzlef/graph-openmp: OpenMP-based parallel graph implementation"
+version: 1.2.0
+doi: 10.5281/zenodo.8329495
+date-released: 2023-09-08
