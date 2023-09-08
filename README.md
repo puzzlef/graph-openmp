@@ -9,10 +9,10 @@ I have been trying to parallelize the graph data structure from bottom up.
 - The buffer is needed to do an *in-place* `set_union_last_unique()` / `set_difference_unique()`.
 - Different threads must work on *different* vertices.
 
-[![](https://i.imgur.com/Jp1UDS5.png)][sheetp]
-[![](https://i.imgur.com/7lA6tWb.png)][sheetp]
-[![](https://i.imgur.com/170NBzh.png)][sheetp]
-[![](https://i.imgur.com/rdyR5Uo.png)][sheetp]
+<!-- [![](https://i.imgur.com/Jp1UDS5.png)][sheetp] -->
+<!-- [![](https://i.imgur.com/7lA6tWb.png)][sheetp] -->
+<!-- [![](https://i.imgur.com/170NBzh.png)][sheetp] -->
+<!-- [![](https://i.imgur.com/rdyR5Uo.png)][sheetp] -->
 
 <br>
 
@@ -33,11 +33,11 @@ detecting any more bottlenecks. The parallel edge update is as follows. Only one
 of the 12 threads will add the edge to the graph if the source vertex belongs to
 its chunk.
 
-[![](https://i.imgur.com/ONf0uPi.png)][sheetp]
+<!-- [![](https://i.imgur.com/ONf0uPi.png)][sheetp] -->
 [![](https://i.imgur.com/EBCyi5u.png)][sheetp]
-[![](https://i.imgur.com/lB8xouh.png)][sheetp]
-[![](https://i.imgur.com/pMRwmIa.png)][sheetp]
-[![](https://i.imgur.com/VJMyves.png)][sheetp]
+<!-- [![](https://i.imgur.com/lB8xouh.png)][sheetp] -->
+<!-- [![](https://i.imgur.com/pMRwmIa.png)][sheetp] -->
+<!-- [![](https://i.imgur.com/VJMyves.png)][sheetp] -->
 
 <br>
 
