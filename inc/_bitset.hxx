@@ -108,6 +108,16 @@ class LazyBitset {
   }
 
   /**
+   * Iterate over the entries in the bitset.
+   * @param fp process function (key, value)
+   */
+  template <class F>
+  inline void forEach(F fp) noexcept {
+    for (auto& p : pairs)
+      fp(p.first, p.second);
+  }
+
+  /**
    * Iterate over the keys in the bitset.
    * @param fp process function (key)
    */
