@@ -30,13 +30,13 @@ using std::getline;
 #pragma region READ MTX HEADER
 /**
  * Read header of MTX file.
- * @param s input stream
- * @param symmetric is graph symmetric (updated)
- * @param rows number of rows (updated)
- * @param cols number of columns (updated)
- * @param size number of lines/edges (updated)
+ * @param symmetric is graph symmetric (output)
+ * @param rows number of rows (output)
+ * @param cols number of columns (output)
+ * @param size number of lines/edges (output)
+ * @param s input stream (updated)
  */
-inline void readMtxHeader(istream& s, bool& symmetric, size_t& rows, size_t& cols, size_t& size) {
+inline void readMtxHeaderU(bool& symmetric, size_t& rows, size_t& cols, size_t& size, istream& s) {
   string line, h0, h1, h2, h3, h4;
   // Skip past the comments and read the graph type.
   while (true) {
@@ -52,55 +52,86 @@ inline void readMtxHeader(istream& s, bool& symmetric, size_t& rows, size_t& col
   istringstream sline(line);
   sline >> rows >> cols >> size;
 }
-inline void readMtxHeader(const char* pth, bool& symmetric, size_t& rows, size_t& cols, size_t& size) {
+
+
+/**
+ * Read header of MTX file.
+ * @param symmetric is graph symmetric (output)
+ * @param rows number of rows (output)
+ * @param cols number of columns (output)
+ * @param size number of lines/edges (output)
+ * @param pth input file path
+ */
+inline void readMtxHeaderW(bool& symmetric, size_t& rows, size_t& cols, size_t& size, const char* pth) {
   ifstream s(pth);
-  return readMtxHeader(s, symmetric, rows, cols, size);
+  return readMtxHeaderU(symmetric, rows, cols, size, s);
 }
 
 
 /**
  * Read order of graph in MTX file.
- * @param s input stream
+ * @param s input stream (updated)
  * @returns number of vertices (1-N)
  */
-inline size_t readMtxOrder(istream& s) {
+inline size_t readMtxOrderU(istream& s) {
   bool symmetric; size_t rows, cols, size;
-  readMtxHeader(s, symmetric, rows, cols, size);
+  readMtxHeaderU(symmetric, rows, cols, size, s);
   return max(rows, cols);
 }
+
+
+/**
+ * Read order of graph in MTX file.
+ * @param pth input file path
+ * @returns number of vertices (1-N)
+ */
 inline size_t readMtxOrder(const char* pth) {
   ifstream s(pth);
-  return readMtxOrder(s);
+  return readMtxOrderU(s);
 }
 
 
 /**
  * Read size of graph in MTX file.
- * @param s input stream
+ * @param s input stream (updated)
  * @returns number of edges
  */
-inline size_t readMtxSize(istream& s) {
+inline size_t readMtxSizeU(istream& s) {
   bool symmetric; size_t rows, cols, size;
-  readMtxHeader(s, symmetric, rows, cols, size);
+  readMtxHeaderU(symmetric, rows, cols, size, s);
   return size;
 }
+
+
+/**
+ * Read size of graph in MTX file.
+ * @param pth input file path
+ * @returns number of edges
+ */
 inline size_t readMtxSize(const char* pth) {
   ifstream s(pth);
-  return readMtxSize(s);
+  return readMtxSizeU(s);
 }
 
 
 /**
  * Read span of graph in MTX file.
- * @param s input stream
+ * @param s input stream (updated)
  * @returns number of vertices + 1
  */
-inline size_t readMtxSpan(istream& s) {
-  return readMtxOrder(s) + 1;
+inline size_t readMtxSpanU(istream& s) {
+  return readMtxOrderU(s) + 1;
 }
+
+
+/**
+ * Read span of graph in MTX file.
+ * @param pth input file path
+ * @returns number of vertices + 1
+ */
 inline size_t readMtxSpan(const char* pth) {
   ifstream s(pth);
-  return readMtxSpan(s);
+  return readMtxSpanU(s);
 }
 #pragma endregion
 
@@ -110,15 +141,15 @@ inline size_t readMtxSpan(const char* pth) {
 #pragma region READ MTX DO
 /**
  * Read contents of MTX file.
- * @param s input stream
+ * @param s input stream (updated)
  * @param weighted is it weighted?
  * @param fh on header (symmetric, rows, cols, size)
  * @param fb on body line (u, v, w)
  */
 template <class FH, class FB>
-inline void readMtxDo(istream& s, bool weighted, FH fh, FB fb) {
+inline void readMtxDoU(istream& s, bool weighted, FH fh, FB fb) {
   bool symmetric; size_t rows, cols, size;
-  readMtxHeader(s, symmetric, rows, cols, size);
+  readMtxHeaderU(s, symmetric, rows, cols, size);
   fh(symmetric, rows, cols, size);
   size_t n = max(rows, cols);
   if (n==0) return;
@@ -133,25 +164,34 @@ inline void readMtxDo(istream& s, bool weighted, FH fh, FB fb) {
     if (symmetric) fb(v, u, w);
   }
 }
+
+
+/**
+ * Read contents of MTX file.
+ * @param pth input file path
+ * @param weighted is it weighted?
+ * @param fh on header (symmetric, rows, cols, size)
+ * @param fb on body line (u, v, w)
+ */
 template <class FH, class FB>
 inline void readMtxDo(const char *pth, bool weighted, FH fh, FB fb) {
   ifstream s(pth);
-  readMtxDo(s, weighted, fh, fb);
+  readMtxDoU(s, weighted, fh, fb);
 }
 
 
 #ifdef OPENMP
 /**
  * Read contents of MTX file.
- * @param s input stream
+ * @param s input stream (updated)
  * @param weighted is it weighted?
  * @param fh on header (symmetric, rows, cols, size)
  * @param fb on body line (u, v, w)
  */
 template <class FH, class FB>
-inline void readMtxDoOmp(istream& s, bool weighted, FH fh, FB fb) {
+inline void readMtxDoOmpU(istream& s, bool weighted, FH fh, FB fb) {
   bool symmetric; size_t rows, cols, size;
-  readMtxHeader(s, symmetric, rows, cols, size);
+  readMtxHeaderU(s, symmetric, rows, cols, size);
   fh(symmetric, rows, cols, size);
   size_t n = max(rows, cols);
   if (n==0) return;
@@ -186,10 +226,19 @@ inline void readMtxDoOmp(istream& s, bool weighted, FH fh, FB fb) {
     }
   }
 }
+
+
+/**
+ * Read contents of MTX file.
+ * @param pth input file path
+ * @param weighted is it weighted?
+ * @param fh on header (symmetric, rows, cols, size)
+ * @param fb on body line (u, v, w)
+ */
 template <class FH, class FB>
 inline void readMtxDoOmp(const char *pth, bool weighted, FH fh, FB fb) {
   ifstream s(pth);
-  readMtxDoOmp(s, weighted, fh, fb);
+  readMtxDoOmpU(s, weighted, fh, fb);
 }
 #endif
 #pragma endregion
@@ -200,52 +249,74 @@ inline void readMtxDoOmp(const char *pth, bool weighted, FH fh, FB fb) {
 #pragma region READ MTX IF
 /**
  * Read MTX file as graph if test passes.
- * @param a output graph (updated)
- * @param s input stream
+ * @param a output graph (output)
+ * @param s input stream (updated)
  * @param weighted is it weighted?
  * @param fv include vertex? (u, d)
  * @param fe include edge? (u, v, w)
  */
 template <class G, class FV, class FE>
-inline void readMtxIfW(G &a, istream& s, bool weighted, FV fv, FE fe) {
+inline void readMtxIfU(G &a, istream& s, bool weighted, FV fv, FE fe) {
   using K = typename G::key_type;
   using V = typename G::vertex_value_type;
   using E = typename G::edge_value_type;
+  a.clear();  // Ensure that the graph is empty
   auto fh = [&](auto symmetric, auto rows, auto cols, auto size) { addVerticesIfU(a, K(1), K(max(rows, cols)+1), V(), fv); };
   auto fb = [&](auto u, auto v, auto w) { if (fe(K(u), K(v), K(w))) a.addEdge(K(u), K(v), E(w)); };
-  readMtxDo(s, weighted, fh, fb);
+  readMtxDoU(s, weighted, fh, fb);
   a.update();
 }
+
+
+/**
+ * Read MTX file as graph if test passes.
+ * @param a output graph (output)
+ * @param pth input file path
+ * @param weighted is it weighted?
+ * @param fv include vertex? (u, d)
+ * @param fe include edge? (u, v, w)
+ */
 template <class G, class FV, class FE>
 inline void readMtxIfW(G &a, const char *pth, bool weighted, FV fv, FE fe) {
   ifstream s(pth);
-  readMtxIfW(a, s, weighted, fv, fe);
+  readMtxIfU(a, s, weighted, fv, fe);
 }
 
 
 #ifdef OPENMP
 /**
  * Read MTX file as graph if test passes.
- * @param a output graph (updated)
- * @param s input stream
+ * @param a output graph (output)
+ * @param s input stream (updated)
  * @param weighted is it weighted?
  * @param fv include vertex? (u, d)
  * @param fe include edge? (u, v, w)
  */
 template <class G, class FV, class FE>
-inline void readMtxIfOmpW(G &a, istream& s, bool weighted, FV fv, FE fe) {
+inline void readMtxIfOmpU(G &a, istream& s, bool weighted, FV fv, FE fe) {
   using K = typename G::key_type;
   using V = typename G::vertex_value_type;
   using E = typename G::edge_value_type;
+  a.clear();  // Ensure that the graph is empty
   auto fh = [&](auto symmetric, auto rows, auto cols, auto size) { addVerticesIfU(a, K(1), K(max(rows, cols)+1), V(), fv); };
   auto fb = [&](auto u, auto v, auto w) { if (fe(K(u), K(v), K(w))) addEdgeOmpU(a, K(u), K(v), E(w)); };
-  readMtxDoOmp(s, weighted, fh, fb);
+  readMtxDoOmpU(s, weighted, fh, fb);
   updateOmpU(a);
 }
+
+
+/**
+ * Read MTX file as graph if test passes.
+ * @param a output graph (output)
+ * @param pth input file path
+ * @param weighted is it weighted?
+ * @param fv include vertex? (u, d)
+ * @param fe include edge? (u, v, w)
+ */
 template <class G, class FV, class FE>
 inline void readMtxIfOmpW(G &a, const char *pth, bool weighted, FV fv, FE fe) {
   ifstream s(pth);
-  readMtxIfOmpW(a, s, weighted, fv, fe);
+  readMtxIfOmpU(a, s, weighted, fv, fe);
 }
 #endif
 #pragma endregion
@@ -256,40 +327,56 @@ inline void readMtxIfOmpW(G &a, const char *pth, bool weighted, FV fv, FE fe) {
 #pragma region READ MTX
 /**
  * Read MTX file as graph.
- * @param a output graph (updated)
- * @param s input stream
+ * @param a output graph (output)
+ * @param s input stream (updated)
  * @param weighted is it weighted?
  */
 template <class G>
-inline void readMtxW(G& a, istream& s, bool weighted=false) {
+inline void readMtxU(G& a, istream& s, bool weighted=false) {
   auto fv = [](auto u, auto d)         { return true; };
   auto fe = [](auto u, auto v, auto w) { return true; };
-  readMtxIfW(a, s, weighted, fv, fe);
+  readMtxIfU(a, s, weighted, fv, fe);
 }
+
+
+/**
+ * Read MTX file as graph.
+ * @param a output graph (output)
+ * @param pth input file path
+ * @param weighted is it weighted?
+ */
 template <class G>
 inline void readMtxW(G& a, const char *pth, bool weighted=false) {
   ifstream s(pth);
-  readMtxW(a, s, weighted);
+  readMtxU(a, s, weighted);
 }
 
 
 #ifdef OPENMP
 /**
  * Read MTX file as graph.
- * @param a output graph (updated)
- * @param s input stream
+ * @param a output graph (output)
+ * @param s input stream (updated)
  * @param weighted is it weighted?
  */
 template <class G>
-inline void readMtxOmpW(G& a, istream& s, bool weighted=false) {
+inline void readMtxOmpU(G& a, istream& s, bool weighted=false) {
   auto fv = [](auto u, auto d)         { return true; };
   auto fe = [](auto u, auto v, auto w) { return true; };
-  readMtxIfOmpW(a, s, weighted, fv, fe);
+  readMtxIfOmpU(a, s, weighted, fv, fe);
 }
+
+
+/**
+ * Read MTX file as graph.
+ * @param a output graph (output)
+ * @param pth input file path
+ * @param weighted is it weighted?
+ */
 template <class G>
 inline void readMtxOmpW(G& a, const char *pth, bool weighted=false) {
   ifstream s(pth);
-  readMtxOmpW(a, s, weighted);
+  readMtxOmpU(a, s, weighted);
 }
 #endif
 #pragma endregion
