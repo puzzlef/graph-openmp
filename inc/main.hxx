@@ -4,7 +4,7 @@
 #include "_main.hxx"
 #include "Graph.hxx"
 #include "update.hxx"
-#include "mtx.hxx"
+#include "io.hxx"
 #include "csr.hxx"
 #include "duplicate.hxx"
 #include "transpose.hxx"
