@@ -53,7 +53,7 @@ int main(int argc, char **argv) {
   DiGraph<K, None, V> x, xt;
   auto  ft = [](auto u) { return true; };
   LOG("Loading graph %s ...\n", file);
-  float tr = measureDuration([&]() { readMtxOmpW(x, file, weighted); });
+  float tr = measureDuration([&]() { readMtxFormatOmpW(x, file, weighted); });
   LOG("{%09.1fms} ", tr); print(x);  printf(" readMtx\n");
   float ts = measureDuration([&]() { addSelfLoopsOmpU(x, V(), ft); });
   LOG("{%09.1fms} ", ts); print(x);  printf(" addSelfLoops\n");

@@ -121,6 +121,7 @@ inline void readTokenU(string_view& a, string_view& x, FU fu, FW fw) {
   auto tb = findNextNonBlank(xb, xe, fu);
   auto te = findNextWhitespace(tb+1, xe, fw);
   a = x.substr(tb-xb, te-tb);
+  x.remove_prefix(te-xb);
 }
 
 

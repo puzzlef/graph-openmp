@@ -82,7 +82,7 @@ inline bool readMtxFormatHeaderU(bool& symmetric, size_t& rows, size_t& cols, si
     readTokenU(h3, data, fu, fw);
     readTokenU(h4, data, fu, fw);
   }
-  if (h1!="matrix" || h2!="coordinate") { symmetric = false; rows = 0; cols = 0; size = 0; return; }
+  if (h1!="matrix" || h2!="coordinate") { symmetric = false; rows = 0; cols = 0; size = 0; return true; }
   symmetric = h4=="symmetric" || h4=="skew-symmetric";
   // Read rows, cols, size.
   err |= readValueU(rows, data, fu, fw);
@@ -327,7 +327,7 @@ inline bool readMtxFormatDo(string_view data, bool weighted, FH fh, FB fb) {
 template <class FH, class FB>
 inline void readMtxFormatDoU(istream& s, bool weighted, FH fh, FB fb) {
   bool symmetric; size_t rows, cols, size;
-  readMtxFormatHeaderU(s, symmetric, rows, cols, size);
+  readMtxFormatHeaderU(symmetric, rows, cols, size, s);
   fh(symmetric, rows, cols, size);
   size_t n = max(rows, cols);
   if (n==0) return;
@@ -391,7 +391,7 @@ inline bool readMtxFormatDoOmp(string_view data, bool weighted, FH fh, FB fb) {
 template <class FH, class FB>
 inline void readMtxFormatDoOmpU(istream& s, bool weighted, FH fh, FB fb) {
   bool symmetric; size_t rows, cols, size;
-  readMtxFormatHeaderU(s, symmetric, rows, cols, size);
+  readMtxFormatHeaderU(symmetric, rows, cols, size, s);
   fh(symmetric, rows, cols, size);
   size_t n = max(rows, cols);
   if (n==0) return;
@@ -625,7 +625,7 @@ inline void readMtxFormatIfOmpW(G &a, const char *pth, bool weighted, FV fv, FE 
  * @param weighted is graph weighted
  */
 template <class G>
-inline bool readCooFormatW(G& a, string_view data, bool symmetric, bool weighted=false) {
+inline void readCooFormatW(G& a, string_view data, bool symmetric, bool weighted=false) {
   auto fv = [](auto u, auto d)         { return true; };
   auto fe = [](auto u, auto v, auto w) { return true; };
   readCooFormatIfW(a, data, symmetric, weighted, fv, fe);
