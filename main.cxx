@@ -51,42 +51,61 @@ using namespace std;
 int main(int argc, char **argv) {
   using K = uint32_t;
   using V = TYPE;
+  using Edge = tuple<uint32_t, uint32_t, float>;
   char *file    = argv[1];
   bool weighted = false;
   omp_set_num_threads(MAX_THREADS);
   LOG("OMP_NUM_THREADS=%d\n", MAX_THREADS);
   DiGraph<K, None, V> x, xt;
   auto  ft = [](auto u) { return true; };
-  // LOG("Loading graph %s ...\n", file);
-  // float tr = measureDuration([&]() { readMtxFormatOmpW(x, file, weighted); });
-  // LOG("{%09.1fms} ", tr); print(x);  printf(" readMtx\n");
-  // float ts = measureDuration([&]() { addSelfLoopsOmpU(x, V(), ft); });
-  // LOG("{%09.1fms} ", ts); print(x);  printf(" addSelfLoops\n");
-  // float tt = measureDuration([&]() { transposeOmpW(xt, x); });
-  // LOG("{%09.1fms} ", tt); print(xt); printf(" transpose\n");
-  // // Test with mmap().
-  int fd = open(file, O_RDONLY);  // O_DIRECT?
-  if (fd == -1) { perror("open"); exit(1); }
+  // Disabled old code, as i am testing mmap() now.
+  #if 0
+  LOG("Loading graph %s ...\n", file);
+  float tr = measureDuration([&]() { readMtxFormatOmpW(x, file, weighted); });
+  LOG("{%09.1fms} ", tr); print(x);  printf(" readMtx\n");
+  float ts = measureDuration([&]() { addSelfLoopsOmpU(x, V(), ft); });
+  LOG("{%09.1fms} ", ts); print(x);  printf(" addSelfLoops\n");
+  float tt = measureDuration([&]() { transposeOmpW(xt, x); });
+  LOG("{%09.1fms} ", tt); print(xt); printf(" transpose\n");
+  #endif
+  // mmap() the file.
   struct stat sb;
-  if (fstat(fd, &sb) == -1) { perror("fstat"); exit(1); }
+  int   fd = open(file, O_RDONLY);  // O_DIRECT?
+  fstat(fd, &sb);
   void *addr = mmap(NULL, sb.st_size, PROT_READ, MAP_SHARED | MAP_NORESERVE, fd, 0);
-  if (addr == MAP_FAILED) { perror("mmap"); exit(1); }
-  if (madvise(addr, sb.st_size, MADV_WILLNEED) == -1) { perror("madvise"); exit(1); }
+  madvise(addr, sb.st_size, MADV_WILLNEED);
+  // Read the header.
   LOG("Loading graph %s ...\n", file);
   string_view data((const char*) addr, sb.st_size);
-  string line = string(data.substr(0, data.find('\n')));
-  LOG("mmap() success: %s\n", line.c_str());
+  bool symmetric; size_t rows, cols, size;
+  readMtxFormatHeaderU(symmetric, rows, cols, size, data);
+  printf("order=%zu, size=%zu\n", rows, size);
+  // Allocate memory for the graph.
+  int T = omp_get_max_threads();
+  vector<vector<Edge>*> edges(T);
+  for (int t=0; t<T; ++t) {
+    edges[t] = new vector<Edge>();
+    edges[t]->reserve(size);  // Over-allocate to avoid reallocation
+  }
+  // Read the graph.
+  auto fb = [&](auto u, auto v, auto w) {
+    int t = omp_get_thread_num();
+    edges[t]->push_back({uint32_t(u), uint32_t(v), float(w)});
+  };
+  symmetric = false;
   float tm = measureDuration([&]() {
-    bool symmetric; size_t rows, cols, size;
-    readMtxFormatHeaderU(symmetric, rows, cols, size, data);
-    vector<tuple<uint32_t, uint32_t, float>> edges;
-    edges.reserve(size);
-    auto fb = [&](auto u, auto v, auto w) { edges.push_back({uint32_t(u), uint32_t(v), float(w)}); };
-    readEdgelistFormatDoU(data, symmetric, weighted, fb);
+    readEdgelistFormatSeparateDoOmpU(data, symmetric, weighted, fb);
   });
-  LOG("{%09.1fms} ", tm); print(x);  printf(" readMtxMmap\n");
-  if (munmap(addr, sb.st_size) == -1) { perror("munmap"); exit(1); }
-  if (close(fd) == -1) { perror("close"); exit(1); }
+  size_t readSize = 0;
+  for (int t=0; t<T; ++t)
+    readSize += edges[t]->size();
+  printf("Read %zu edges\n", readSize);
+  LOG("{%09.1fms} readMtxMmap\n", tm);
+  // Cleanup.
+  for (int t=0; t<T; ++t)
+    delete edges[t];
+  munmap(addr, sb.st_size);
+  close(fd);
   printf("\n");
   return 0;
 }

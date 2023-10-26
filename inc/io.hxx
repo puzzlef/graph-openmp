@@ -185,6 +185,36 @@ inline string_view readEdgelistFormatBlock(const string_view& data, size_t b, si
 
 
 /**
+ * Read an EdgeList format file in separate threads.
+ * @param data input file data (updated)
+ * @param symmetric is graph symmetric
+ * @param weighted is graph weighted
+ * @param fb on body line (u, v, w)
+ * @returns true if error occurred
+ */
+template <class FB>
+inline bool readEdgelistFormatSeparateDoOmpU(string_view& data, bool symmetric, bool weighted, FB fb) {
+  bool err = false;
+  const int T = omp_get_max_threads();
+  const size_t DATA  = data.size();
+  const size_t BLOCK = 2 * 4096;       // Characters per block (2 pages)
+  const size_t GRID  = 4 * T * BLOCK;  // Characters per grid (8T pages)
+  // Process COO file in grids.
+  for (size_t g=0; g<DATA; g+=GRID) {
+    size_t B = min(g+GRID, DATA);
+    // Process a grid in parallel with dynamic scheduling.
+    #pragma omp parallel for schedule(static)
+    for (size_t b=g; b<B; b+=BLOCK) {
+      string_view bdata = readEdgelistFormatBlock(data, b, BLOCK);
+      err |= readEdgelistFormatDoU(bdata, weighted, symmetric, fb);
+    }
+  }
+  data.remove_prefix(DATA);
+  return err;
+}
+
+
+/**
  * Read an EdgeList format file.
  * @param data input file data (updated)
  * @param symmetric is graph symmetric
