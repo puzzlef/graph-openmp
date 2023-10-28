@@ -229,7 +229,7 @@ inline bool readEdgelistFormatDoOmpU(string_view& data, bool symmetric, bool wei
   const int T = omp_get_max_threads();
   const size_t DATA  = data.size();
   const size_t BLOCK = 4096;             // Characters per block (1 page)
-  const size_t GRID  = 128 * T * BLOCK;  // Characters per grid (128T pages)
+  const size_t GRID  = 1280000 * T * BLOCK;  // Characters per grid (128T pages)
   // Allocate memory for buffering edges.
   vector<vector<EDGE>*> edges(T);
   for (int t=0; t<T; ++t) {
