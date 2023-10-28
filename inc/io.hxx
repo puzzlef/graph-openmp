@@ -197,13 +197,13 @@ inline bool readEdgelistFormatSeparateDoOmpU(string_view& data, bool symmetric, 
   bool err = false;
   const int T = omp_get_max_threads();
   const size_t DATA  = data.size();
-  const size_t BLOCK = 2 * 4096;       // Characters per block (2 pages)
-  const size_t GRID  = 4 * T * BLOCK;  // Characters per grid (8T pages)
+  const size_t BLOCK = 4096;             // Characters per block (1 page)
+  const size_t GRID  = 128 * T * BLOCK;  // Characters per grid (128T pages)
   // Process COO file in grids.
   for (size_t g=0; g<DATA; g+=GRID) {
     size_t B = min(g+GRID, DATA);
     // Process a grid in parallel with dynamic scheduling.
-    #pragma omp parallel for schedule(static)
+    #pragma omp parallel for schedule(dynamic, 1)
     for (size_t b=g; b<B; b+=BLOCK) {
       string_view bdata = readEdgelistFormatBlock(data, b, BLOCK);
       err |= readEdgelistFormatDoU(bdata, weighted, symmetric, fb);
@@ -228,8 +228,8 @@ inline bool readEdgelistFormatDoOmpU(string_view& data, bool symmetric, bool wei
   bool err = false;
   const int T = omp_get_max_threads();
   const size_t DATA  = data.size();
-  const size_t BLOCK = 2 * 4096;       // Characters per block (2 pages)
-  const size_t GRID  = 4 * T * BLOCK;  // Characters per grid (8T pages)
+  const size_t BLOCK = 4096;             // Characters per block (1 page)
+  const size_t GRID  = 128 * T * BLOCK;  // Characters per grid (128T pages)
   // Allocate memory for buffering edges.
   vector<vector<EDGE>*> edges(T);
   for (int t=0; t<T; ++t) {

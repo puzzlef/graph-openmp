@@ -72,8 +72,8 @@ int main(int argc, char **argv) {
   struct stat sb;
   int   fd = open(file, O_RDONLY);  // O_DIRECT?
   fstat(fd, &sb);
-  void *addr = mmap(NULL, sb.st_size, PROT_READ, MAP_SHARED | MAP_NORESERVE, fd, 0);
-  madvise(addr, sb.st_size, MADV_WILLNEED);
+  void *addr = mmap(NULL, sb.st_size, PROT_READ, MAP_SHARED | MAP_NORESERVE, fd, 0);  // MAP_PRIVATE?
+  madvise(addr, sb.st_size, MADV_WILLNEED);  // MADV_SEQUENTIAL?
   // Read the header.
   LOG("Loading graph %s ...\n", file);
   string_view data((const char*) addr, sb.st_size);
