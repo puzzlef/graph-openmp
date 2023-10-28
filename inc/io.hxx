@@ -402,6 +402,7 @@ inline bool readMtxFormatDoOmp(string_view data, bool weighted, FH fh, FB fb) {
   bool err = false;
   bool symmetric; size_t rows, cols, size;
   err |= readMtxFormatHeaderU(symmetric, rows, cols, size, data);
+  printf("rows=%zu, cols=%zu, size=%zu\n", rows, cols, size);
   if (err) return err;
   fh(symmetric, rows, cols, size);
   size_t n = max(rows, cols);
@@ -602,7 +603,7 @@ inline void readMtxFormatIfOmpW(G& a, string_view data, bool weighted, FV fv, FE
   auto fh = [&](auto symmetric, auto rows, auto cols, auto size) { addVerticesIfU(a, K(1), K(max(rows, cols)+1), V(), fv); };
   auto fb = [&](auto u, auto v, auto w) { if (fe(K(u), K(v), K(w))) addEdgeOmpU(a, K(u), K(v), E(w)); };
   readMtxFormatDoOmp(data, weighted, fh, fb);
-  a.update();
+  updateOmpU(a);
 }
 
 

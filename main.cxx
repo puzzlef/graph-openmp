@@ -50,7 +50,7 @@ using namespace std;
  */
 int main(int argc, char **argv) {
   using K = uint32_t;
-  using V = TYPE;
+  using V = None;
   using Edge = tuple<uint32_t, uint32_t, float>;
   char *file    = argv[1];
   bool weighted = false;
@@ -77,9 +77,10 @@ int main(int argc, char **argv) {
   // Read the header.
   LOG("Loading graph %s ...\n", file);
   string_view data((const char*) addr, sb.st_size);
-  bool symmetric; size_t rows, cols, size;
-  readMtxFormatHeaderU(symmetric, rows, cols, size, data);
-  printf("order=%zu, size=%zu\n", rows, size);
+  // bool symmetric; size_t rows, cols, size;
+  // readMtxFormatHeaderU(symmetric, rows, cols, size, data);
+  // printf("order=%zu, size=%zu\n", rows, size);
+  #if 0
   // Allocate memory for the graph.
   int T = omp_get_max_threads();
   vector<vector<Edge>*> edges(T);
@@ -101,9 +102,22 @@ int main(int argc, char **argv) {
     readSize += edges[t]->size();
   printf("Read %zu edges\n", readSize);
   LOG("{%09.1fms} readMtxMmap\n", tm);
+  #endif
+  float tm = measureDuration([&]() {
+    auto fv = [](auto u, auto d)         { return true; };
+    auto fe = [](auto u, auto v, auto w) { return true; };
+    auto fh = [&](auto symmetric, auto rows, auto cols, auto size) {
+      addVerticesIfU(x, K(1), K(max(rows, cols)+1), V(), fv);
+    };
+    auto fb = [&](auto u, auto v, auto w) { if (fe(K(u), K(v), K(w))) addEdgeOmpU(x, K(u), K(v), V(w)); };
+    readMtxFormatDoOmp(data, weighted, fh, fb);
+  });
+  LOG("{%09.1fms} readMtxMmap\n", tm);
+  updateOmpU(x);
+  println(x);
   // Cleanup.
-  for (int t=0; t<T; ++t)
-    delete edges[t];
+  // for (int t=0; t<T; ++t)
+  //   delete edges[t];
   munmap(addr, sb.st_size);
   close(fd);
   printf("\n");
