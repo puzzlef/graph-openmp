@@ -109,8 +109,12 @@ int main(int argc, char **argv) {
     auto fh = [&](auto symmetric, auto rows, auto cols, auto size) {
       addVerticesIfU(x, K(1), K(max(rows, cols)+1), V(), fv);
     };
+    auto fd = [&](const auto& degrees) {
+      for (K u=0; u<x.span(); ++u)
+        x.reserveEdges(u, degrees[u]);
+    };
     auto fb = [&](auto u, auto v, auto w) { if (fe(K(u), K(v), K(w))) addEdgeOmpU(x, K(u), K(v), V(w)); };
-    readMtxFormatDoOmp(data, weighted, fh, fb);
+    readMtxFormatDoOmp(data, weighted, fh, fb, fd);
   });
   LOG("{%09.1fms} readMtxMmap\n", tm);
   updateOmpU(x);

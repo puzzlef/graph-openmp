@@ -214,6 +214,35 @@ inline bool readEdgelistFormatSeparateDoOmpU(string_view& data, bool symmetric, 
 }
 
 
+inline bool readEdgelistFormatDegreesDoOmpU(vector<size_t>& degrees, string_view& data, bool symmetric, bool weighted) {
+  bool err = false;
+  const int T = omp_get_max_threads();
+  const size_t DATA  = data.size();
+  const size_t BLOCK = 4096;             // Characters per block (1 page)
+  const size_t GRID  = 128 * T * BLOCK;  // Characters per grid (128T pages)
+  // Process COO file in grids.
+  for (size_t g=0; g<DATA; g+=GRID) {
+    size_t B = min(g+GRID, DATA);
+    // Process a grid in parallel with dynamic scheduling.
+    #pragma omp parallel for schedule(dynamic, 1)
+    for (size_t b=g; b<B; b+=BLOCK) {
+      string_view bdata = readEdgelistFormatBlock(data, b, BLOCK);
+      auto fc = [&](auto u, auto v, auto w) {
+        #pragma omp atomic update
+        ++degrees[u];
+        if (symmetric) {
+          #pragma omp atomic update
+          ++degrees[v];
+        }
+      };
+      err |= readEdgelistFormatDoU(bdata, weighted, symmetric, fc);
+    }
+  }
+  data.remove_prefix(DATA);
+  return err;
+}
+
+
 /**
  * Read an EdgeList format file.
  * @param data input file data (updated)
@@ -397,8 +426,8 @@ inline void readMtxFormatDo(const char *pth, bool weighted, FH fh, FB fb) {
  * @param fb on body line (u, v, w)
  * @returns true if error occurred
  */
-template <class FH, class FB>
-inline bool readMtxFormatDoOmp(string_view data, bool weighted, FH fh, FB fb) {
+template <class FH, class FB, class FD>
+inline bool readMtxFormatDoOmp(string_view data, bool weighted, FH fh, FB fb, FD fd) {
   bool err = false;
   bool symmetric; size_t rows, cols, size;
   err |= readMtxFormatHeaderU(symmetric, rows, cols, size, data);
@@ -407,7 +436,18 @@ inline bool readMtxFormatDoOmp(string_view data, bool weighted, FH fh, FB fb) {
   fh(symmetric, rows, cols, size);
   size_t n = max(rows, cols);
   if (n==0) return err;
+  vector<size_t> degrees(n+1);
+  string_view ddata = data;
+  auto t0 = timeNow();
+  err |= readEdgelistFormatDegreesDoOmpU(degrees, ddata, symmetric, weighted);
+  auto t1 = timeNow();
+  fd(degrees);
+  auto t2 = timeNow();
   err |= readEdgelistFormatDoOmpU(data, symmetric, weighted, fb);
+  auto t3 = timeNow();
+  printf("read degrees in %fms\n", duration(t0, t1));
+  printf("reserve edges in %fms\n", duration(t1, t2));
+  printf("read edges in %fms\n", duration(t2, t3));
   return err;
 }
 
