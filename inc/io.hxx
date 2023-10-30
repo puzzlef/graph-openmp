@@ -91,46 +91,6 @@ inline bool readMtxFormatHeaderU(bool& symmetric, size_t& rows, size_t& cols, si
   dropLineU(data);
   return err;
 }
-
-
-/**
- * Read header of an MTX format file.
- * @param symmetric is graph symmetric (output)
- * @param rows number of rows (output)
- * @param cols number of columns (output)
- * @param size number of lines/edges (output)
- * @param s input stream (updated)
- */
-inline void readMtxFormatHeaderU(bool& symmetric, size_t& rows, size_t& cols, size_t& size, istream& s) {
-  string line, h0, h1, h2, h3, h4;
-  // Skip past the comments and read the graph type.
-  while (true) {
-    getline(s, line);
-    if (line.find('%')!=0) break;
-    if (line.find("%%MatrixMarket")!=0) continue;
-    istringstream sline(line);
-    sline >> h0 >> h1 >> h2 >> h3 >> h4;
-  }
-  if (h1!="matrix" || h2!="coordinate") { symmetric = false; rows = 0; cols = 0; size = 0; return; }
-  symmetric = h4=="symmetric" || h4=="skew-symmetric";
-  // Read rows, cols, size.
-  istringstream sline(line);
-  sline >> rows >> cols >> size;
-}
-
-
-/**
- * Read header of an MTX format file.
- * @param symmetric is graph symmetric (output)
- * @param rows number of rows (output)
- * @param cols number of columns (output)
- * @param size number of lines/edges (output)
- * @param pth input file path
- */
-inline void readMtxFormatHeaderW(bool& symmetric, size_t& rows, size_t& cols, size_t& size, const char* pth) {
-  ifstream s(pth);
-  return readMtxFormatHeaderU(symmetric, rows, cols, size, s);
-}
 #pragma endregion
 
 
@@ -347,47 +307,6 @@ inline bool readMtxFormatDo(string_view data, bool weighted, FH fh, FB fb) {
 }
 
 
-/**
- * Read an MTX format file.
- * @param s input stream (updated)
- * @param weighted is graph weighted
- * @param fh on header (symmetric, rows, cols, size)
- * @param fb on body line (u, v, w)
- */
-template <class FH, class FB>
-inline void readMtxFormatDoU(istream& s, bool weighted, FH fh, FB fb) {
-  bool symmetric; size_t rows, cols, size;
-  readMtxFormatHeaderU(symmetric, rows, cols, size, s);
-  fh(symmetric, rows, cols, size);
-  size_t n = max(rows, cols);
-  if (n==0) return;
-  // Process body lines sequentially.
-  string line;
-  while (getline(s, line)) {
-    size_t u, v; double w = 1;
-    istringstream sline(line);
-    if (!(sline >> u >> v)) break;
-    if (weighted) sline >> w;
-    fb(u, v, w);
-    if (symmetric) fb(v, u, w);
-  }
-}
-
-
-/**
- * Read an MTX format file.
- * @param pth input file path
- * @param weighted is graph weighted
- * @param fh on header (symmetric, rows, cols, size)
- * @param fb on body line (u, v, w)
- */
-template <class FH, class FB>
-inline void readMtxFormatDo(const char *pth, bool weighted, FH fh, FB fb) {
-  ifstream s(pth);
-  readMtxFormatDoU(s, weighted, fh, fb);
-}
-
-
 #ifdef OPENMP
 /**
  * Read an MTX format file.
@@ -408,67 +327,6 @@ inline bool readMtxFormatDoOmp(string_view data, bool weighted, FH fh, FB fb) {
   if (n==0) return err;
   err |= readEdgelistFormatDoOmpU(data, symmetric, weighted, fb);
   return err;
-}
-
-
-/**
- * Read an MTX format file.
- * @param s input stream (updated)
- * @param weighted is graph weighted
- * @param fh on header (symmetric, rows, cols, size)
- * @param fb on body line (u, v, w)
- */
-template <class FH, class FB>
-inline void readMtxFormatDoOmpU(istream& s, bool weighted, FH fh, FB fb) {
-  bool symmetric; size_t rows, cols, size;
-  readMtxFormatHeaderU(symmetric, rows, cols, size, s);
-  fh(symmetric, rows, cols, size);
-  size_t n = max(rows, cols);
-  if (n==0) return;
-  // Process body lines in parallel.
-  const int THREADS = omp_get_max_threads();
-  const int LINES   = 2048 * THREADS;
-  vector<string> lines(LINES);
-  vector<tuple<size_t, size_t, double>> edges(LINES);
-  while (true) {
-    // Read several lines from the stream.
-    int READ = 0;
-    for (int i=0; i<LINES; ++i, ++READ)
-      if (!getline(s, lines[i])) break;
-    if (READ==0) break;
-    // Parse lines using multiple threads.
-    #pragma omp parallel for schedule(dynamic, 1024)
-    for (int i=0; i<READ; ++i) {
-      char *line = (char*) lines[i].c_str();
-      size_t u = strtoull(line, &line, 10);
-      size_t v = strtoull(line, &line, 10);
-      double w = weighted? strtod(line, &line) : 0;
-      edges[i] = {u, v, w? w : 1};
-    }
-    // Notify parsed lines.
-    #pragma omp parallel
-    {
-      for (int i=0; i<READ; ++i) {
-        const auto& [u, v, w] = edges[i];
-        fb(u, v, w);
-        if (symmetric) fb(v, u, w);
-      }
-    }
-  }
-}
-
-
-/**
- * Read an MTX format file.
- * @param pth input file path
- * @param weighted is graph weighted
- * @param fh on header (symmetric, rows, cols, size)
- * @param fb on body line (u, v, w)
- */
-template <class FH, class FB>
-inline void readMtxFormatDoOmp(const char *pth, bool weighted, FH fh, FB fb) {
-  ifstream s(pth);
-  readMtxFormatDoOmpU(s, weighted, fh, fb);
 }
 #endif
 #pragma endregion
@@ -548,42 +406,6 @@ inline void readMtxFormatIfW(G& a, string_view data, bool weighted, FV fv, FE fe
 }
 
 
-/**
- * Read an MTX format file as graph if test passes.
- * @param a output graph (output)
- * @param s input stream (updated)
- * @param weighted is graph weighted
- * @param fv include vertex? (u, d)
- * @param fe include edge? (u, v, w)
- */
-template <class G, class FV, class FE>
-inline void readMtxFormatIfU(G& a, istream& s, bool weighted, FV fv, FE fe) {
-  using K = typename G::key_type;
-  using V = typename G::vertex_value_type;
-  using E = typename G::edge_value_type;
-  a.clear();  // Ensure that the graph is empty
-  auto fh = [&](auto symmetric, auto rows, auto cols, auto size) { addVerticesIfU(a, K(1), K(max(rows, cols)+1), V(), fv); };
-  auto fb = [&](auto u, auto v, auto w) { if (fe(K(u), K(v), K(w))) a.addEdge(K(u), K(v), E(w)); };
-  readMtxFormatDoU(s, weighted, fh, fb);
-  a.update();
-}
-
-
-/**
- * Read an MTX format file as graph if test passes.
- * @param a output graph (output)
- * @param pth input file path
- * @param weighted is graph weighted
- * @param fv include vertex? (u, d)
- * @param fe include edge? (u, v, w)
- */
-template <class G, class FV, class FE>
-inline void readMtxFormatIfW(G &a, const char *pth, bool weighted, FV fv, FE fe) {
-  ifstream s(pth);
-  readMtxFormatIfU(a, s, weighted, fv, fe);
-}
-
-
 #ifdef OPENMP
 /**
  * Read an MTX format file as graph if test passes.
@@ -602,43 +424,7 @@ inline void readMtxFormatIfOmpW(G& a, string_view data, bool weighted, FV fv, FE
   auto fh = [&](auto symmetric, auto rows, auto cols, auto size) { addVerticesIfU(a, K(1), K(max(rows, cols)+1), V(), fv); };
   auto fb = [&](auto u, auto v, auto w) { if (fe(K(u), K(v), K(w))) addEdgeOmpU(a, K(u), K(v), E(w)); };
   readMtxFormatDoOmp(data, weighted, fh, fb);
-  a.update();
-}
-
-
-/**
- * Read an MTX format file as graph if test passes.
- * @param a output graph (output)
- * @param s input stream (updated)
- * @param weighted is graph weighted
- * @param fv include vertex? (u, d)
- * @param fe include edge? (u, v, w)
- */
-template <class G, class FV, class FE>
-inline void readMtxFormatIfOmpU(G &a, istream& s, bool weighted, FV fv, FE fe) {
-  using K = typename G::key_type;
-  using V = typename G::vertex_value_type;
-  using E = typename G::edge_value_type;
-  a.clear();  // Ensure that the graph is empty
-  auto fh = [&](auto symmetric, auto rows, auto cols, auto size) { addVerticesIfU(a, K(1), K(max(rows, cols)+1), V(), fv); };
-  auto fb = [&](auto u, auto v, auto w) { if (fe(K(u), K(v), K(w))) addEdgeOmpU(a, K(u), K(v), E(w)); };
-  readMtxFormatDoOmpU(s, weighted, fh, fb);
   updateOmpU(a);
-}
-
-
-/**
- * Read an MTX format file as graph if test passes.
- * @param a output graph (output)
- * @param pth input file path
- * @param weighted is graph weighted
- * @param fv include vertex? (u, d)
- * @param fe include edge? (u, v, w)
- */
-template <class G, class FV, class FE>
-inline void readMtxFormatIfOmpW(G &a, const char *pth, bool weighted, FV fv, FE fe) {
-  ifstream s(pth);
-  readMtxFormatIfOmpU(a, s, weighted, fv, fe);
 }
 #endif
 #pragma endregion
@@ -656,9 +442,15 @@ inline void readMtxFormatIfOmpW(G &a, const char *pth, bool weighted, FV fv, FE 
  */
 template <class G>
 inline void readCooFormatW(G& a, string_view data, bool symmetric, bool weighted=false) {
-  auto fv = [](auto u, auto d)         { return true; };
-  auto fe = [](auto u, auto v, auto w) { return true; };
-  readCooFormatIfW(a, data, symmetric, weighted, fv, fe);
+  using K = typename G::key_type;
+  using E = typename G::edge_value_type;
+  a.clear();  // Ensure that the graph is empty
+  auto fh = [&](auto rows, auto cols, auto size) {
+    addVerticesU(a, K(1), K(max(rows, cols)+1));
+  };
+  auto fb = [&](auto u, auto v, auto w) { addEdgeU(a, K(u), K(v), E(w)); };
+  readCooFormatDo(data, symmetric, weighted, fh, fb);
+  a.update();
 }
 
 
@@ -672,9 +464,15 @@ inline void readCooFormatW(G& a, string_view data, bool symmetric, bool weighted
  */
 template <class G>
 inline void readCooFormatOmpW(G& a, string_view data, bool symmetric, bool weighted=false) {
-  auto fv = [](auto u, auto d)         { return true; };
-  auto fe = [](auto u, auto v, auto w) { return true; };
-  readCooFormatIfOmpW(a, data, symmetric, weighted, fv, fe);
+  using K = typename G::key_type;
+  using E = typename G::edge_value_type;
+  a.clear();  // Ensure that the graph is empty
+  auto fh = [&](auto rows, auto cols, auto size) {
+    addVerticesU(a, K(1), K(max(rows, cols)+1));
+  };
+  auto fb = [&](auto u, auto v, auto w) { addEdgeOmpU(a, K(u), K(v), E(w)); };
+  readCooFormatDoOmp(data, symmetric, weighted, fh, fb);
+  updateOmpU(a);
 }
 #endif
 #pragma endregion
@@ -691,36 +489,15 @@ inline void readCooFormatOmpW(G& a, string_view data, bool symmetric, bool weigh
  */
 template <class G>
 inline void readMtxFormatW(G& a, string_view data, bool weighted=false) {
-  auto fv = [](auto u, auto d)         { return true; };
-  auto fe = [](auto u, auto v, auto w) { return true; };
-  readMtxFormatIfW(a, data, weighted, fv, fe);
-}
-
-
-/**
- * Read an MTX format file as graph.
- * @param a output graph (output)
- * @param s input stream (updated)
- * @param weighted is graph weighted
- */
-template <class G>
-inline void readMtxFormatU(G& a, istream& s, bool weighted=false) {
-  auto fv = [](auto u, auto d)         { return true; };
-  auto fe = [](auto u, auto v, auto w) { return true; };
-  readMtxFormatIfU(a, s, weighted, fv, fe);
-}
-
-
-/**
- * Read an MTX format file as graph.
- * @param a output graph (output)
- * @param pth input file path
- * @param weighted is graph weighted
- */
-template <class G>
-inline void readMtxFormatW(G& a, const char *pth, bool weighted=false) {
-  ifstream s(pth);
-  readMtxFormatU(a, s, weighted);
+  using K = typename G::key_type;
+  using E = typename G::edge_value_type;
+  a.clear();  // Ensure that the graph is empty
+  auto fh = [&](auto symmetric, auto rows, auto cols, auto size) {
+    addVerticesU(a, K(1), K(max(rows, cols)+1));
+  };
+  auto fb = [&](auto u, auto v, auto w) { addEdgeU(a, K(u), K(v), E(w)); };
+  readMtxFormatDo(data, weighted, fh, fb);
+  a.update();
 }
 
 
@@ -733,36 +510,15 @@ inline void readMtxFormatW(G& a, const char *pth, bool weighted=false) {
  */
 template <class G>
 inline void readMtxFormatOmpW(G& a, string_view data, bool weighted=false) {
-  auto fv = [](auto u, auto d)         { return true; };
-  auto fe = [](auto u, auto v, auto w) { return true; };
-  readMtxFormatIfOmpW(a, data, weighted, fv, fe);
-}
-
-
-/**
- * Read an MTX format file as graph.
- * @param a output graph (output)
- * @param s input stream (updated)
- * @param weighted is graph weighted
- */
-template <class G>
-inline void readMtxFormatOmpU(G& a, istream& s, bool weighted=false) {
-  auto fv = [](auto u, auto d)         { return true; };
-  auto fe = [](auto u, auto v, auto w) { return true; };
-  readMtxFormatIfOmpU(a, s, weighted, fv, fe);
-}
-
-
-/**
- * Read an MTX format file as graph.
- * @param a output graph (output)
- * @param pth input file path
- * @param weighted is graph weighted
- */
-template <class G>
-inline void readMtxFormatOmpW(G& a, const char *pth, bool weighted=false) {
-  ifstream s(pth);
-  readMtxFormatOmpU(a, s, weighted);
+  using K = typename G::key_type;
+  using E = typename G::edge_value_type;
+  a.clear();  // Ensure that the graph is empty
+  auto fh = [&](auto symmetric, auto rows, auto cols, auto size) {
+    addVerticesU(a, K(1), K(max(rows, cols)+1));
+  };
+  auto fb = [&](auto u, auto v, auto w) { addEdgeOmpU(a, K(u), K(v), E(w)); };
+  readMtxFormatDoOmp(data, weighted, fh, fb);
+  updateOmpU(a);
 }
 #endif
 #pragma endregion
