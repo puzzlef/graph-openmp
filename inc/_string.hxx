@@ -126,6 +126,65 @@ inline void readTokenU(string_view& a, string_view& x, FU fu, FW fw) {
 
 
 /**
+ * Obtain an integer from string view.
+ * @param a obtained integer (output)
+ * @param x string view (updated)
+ * @param fu is special blank, e.g. comma? (c)
+ * @param fw is special whitespace, e.g. comma? (c)
+ */
+template <class T, class FU, class FW>
+inline bool readIntegerU(T& a, string_view& x, FU fu, FW fw) {
+  string_view w;
+  readTokenU(w, x, fu, fw);
+  if (w.empty()) return true;
+  T v = T();
+  bool neg = w[0]=='-';
+  if (w[0]=='-' || w[0]=='+') w.remove_prefix(1);
+  for (auto c : w) {
+    if (isDigit(c)) v = v*10 + (c-'0');
+    else return true;
+  }
+  a = neg? -v : v;
+  return false;
+}
+
+
+/**
+  * Obtain a floating-point value from string view.
+  * @param a obtained floating-point value (output)
+  * @param x string view (updated)
+  * @param fu is special blank, e.g. comma? (c)
+  * @param fw is special whitespace, e.g. comma? (c)
+  * @returns true if error occurred
+  */
+template <class T, class FU, class FW>
+inline bool readFloatU(T& a, string_view& x, FU fu, FW fw) {
+  string_view w;
+  readTokenU(w, x, fu, fw);
+  if (w.empty()) return true;
+  int64_t v = 0;
+  bool neg = w[0]=='-';
+  bool dot = false;
+  if (w[0]=='-' || w[0]=='+') w.remove_prefix(1);
+  int exp = 0, dec = 0, i = 0;
+  for (auto c : w) {
+    if (dot) --dec;
+    if (isDigit(c)) v = v*10 + (c-'0');
+    else if (c=='.') dot = true;
+    else if (c=='e' || c=='E') {
+      w.remove_prefix(i+1);
+      if (readIntegerU(exp, w, fu, fw)) return true;
+      break;
+    }
+    else return true;
+    ++i;
+  }
+  a = pow(10, exp+dec) * (neg? -v : v);
+  return false;
+}
+
+
+/**
  * Obtain a value from string view.
  * @param a obtained value (output)
  * @param x string view (updated)
