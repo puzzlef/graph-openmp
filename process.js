@@ -3,10 +3,7 @@ const os = require('os');
 const path = require('path');
 
 const RGRAPH = /^Loading graph .*\/(.*?)\.mtx \.\.\./m;
-const ROMPTH = /^OMP_NUM_THREADS=(\d+)/m;
-const RPARTS = /^readMtxOmpW\(\): vertices=([\d.]+)ms, read=([\d.]+)ms, parse=([\d.]+)ms, edges=([\d.]+)ms, update=([\d.]+)ms/;
-const RORDER = /^order: (\d+) size: (\d+) (?:\[\w+\] )?\{\}/m;
-const RRESLT = /^\[(\S+?) ms\] \w+/m;
+const RRESLT = /^\{(.+?)ms\} order: (.+?) size: (.+?) \[directed\] \{\} (.+)/m;
 
 
 
@@ -51,33 +48,11 @@ function readLogLine(ln, data, state) {
     if (!data.has(graph)) data.set(graph, []);
     state = {graph};
   }
-  else if (ROMPTH.test(ln)) {
-    var [, omp_num_threads] = ROMPTH.exec(ln);
-    state.omp_num_threads   = parseFloat(omp_num_threads);
-    state.order = 0;
-    state.size  = 0;
-    state.vertices_time = 0;
-    state.read_time     = 0;
-    state.parse_time    = 0;
-    state.edges_time    = 0;
-    state.update_time   = 0;
-  }
-  else if (RPARTS.test(ln)) {
-    var [, vertices_time, read_time, parse_time, edges_time, update_time] = RPARTS.exec(ln);
-    state.vertices_time = parseFloat(vertices_time);
-    state.read_time     = parseFloat(read_time);
-    state.parse_time    = parseFloat(parse_time);
-    state.edges_time    = parseFloat(edges_time);
-    state.update_time   = parseFloat(update_time);
-  }
-  else if (RORDER.test(ln)) {
-    var [, order, size] = RORDER.exec(ln);
-    state.order = parseFloat(order);
-    state.size  = parseFloat(size);
-  }
   else if (RRESLT.test(ln)) {
-    var [, total_time] = RRESLT.exec(ln);
+    var [, total_time, order, size] = RRESLT.exec(ln);
     data.get(state.graph).push(Object.assign({}, state, {
+      order: parseFloat(order),
+      size:  parseFloat(size),
       total_time: parseFloat(total_time),
     }));
   }
