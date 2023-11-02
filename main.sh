@@ -32,6 +32,8 @@ DEFINES=(""
 
 # Run
 g++ ${DEFINES[*]} -std=c++17 -O3 -fopenmp main.cxx
+
+perform-all() {
 # stdbuf --output=L ./a.out ~/Data/soc-Epinions1.mtx   2>&1 | tee -a "$out"
 stdbuf --output=L ./a.out ~/Data/indochina-2004.mtx  2>&1 | tee -a "$out"
 stdbuf --output=L ./a.out ~/Data/uk-2002.mtx         2>&1 | tee -a "$out"
@@ -46,3 +48,10 @@ stdbuf --output=L ./a.out ~/Data/asia_osm.mtx        2>&1 | tee -a "$out"
 stdbuf --output=L ./a.out ~/Data/europe_osm.mtx      2>&1 | tee -a "$out"
 stdbuf --output=L ./a.out ~/Data/kmer_A2a.mtx        2>&1 | tee -a "$out"
 stdbuf --output=L ./a.out ~/Data/kmer_V1r.mtx        2>&1 | tee -a "$out"
+}
+
+perform-all
+perform-all
+perform-all
+perform-all
+perform-all
