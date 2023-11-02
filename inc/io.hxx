@@ -200,7 +200,7 @@ inline bool readEdgelistFormatDoOmpU(string_view& data, bool symmetric, bool wei
   for (size_t g=0; g<DATA; g+=GRID) {
     size_t B = min(g+GRID, DATA);
     // Process a grid in parallel with dynamic scheduling.
-    #pragma omp parallel for schedule(dynamic) reduction(|:err)
+    #pragma omp parallel for schedule(dynamic, 1) reduction(|:err) num_threads(32)
     for (size_t b=g; b<B; b+=BLOCK) {
       int t = omp_get_thread_num();
       string_view bdata = readEdgelistFormatBlock(data, b, BLOCK);
@@ -208,7 +208,7 @@ inline bool readEdgelistFormatDoOmpU(string_view& data, bool symmetric, bool wei
       err |= readEdgelistFormatDoU(bdata, weighted, symmetric, fc);
     }
     // Perform on body operation for each read edge.
-    #pragma omp parallel
+    #pragma omp parallel num_threads(32)
     {
       for (int t=0; t<T; ++t) {
         for (auto [u, v, w] : *edges[t]) {
