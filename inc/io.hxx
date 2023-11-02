@@ -198,9 +198,10 @@ inline bool readEdgelistFormatDoOmpU(string_view& data, bool symmetric, bool wei
   }
   // Process COO file in grids.
   for (size_t g=0; g<DATA; g+=GRID) {
+    size_t B = min(g+GRID, DATA);
     // Process a grid in parallel with dynamic scheduling.
     #pragma omp parallel for schedule(dynamic) reduction(|:err)
-    for (size_t b=g; b<g+GRID; b+=BLOCK) {
+    for (size_t b=g; b<B; b+=BLOCK) {
       int t = omp_get_thread_num();
       string_view bdata = readEdgelistFormatBlock(data, b, BLOCK);
       auto fc = [&](auto u, auto v, auto w) { edges[t]->emplace_back(u, v, w); };
