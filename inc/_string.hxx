@@ -1,4 +1,5 @@
 #pragma once
+#include <type_traits>
 #include <string>
 #include <string_view>
 #include <charconv>
@@ -6,6 +7,8 @@
 #include "_debug.hxx"
 #include "_cctype.hxx"
 
+using std::is_integral;
+using std::is_floating_point;
 using std::string;
 using std::string_view;
 using std::from_chars;
@@ -132,16 +135,16 @@ inline void readTokenU(string_view& a, string_view& x, FU fu, FW fw) {
  * @param fu is special blank, e.g. comma? (c)
  * @param fw is special whitespace, e.g. comma? (c)
  */
-template <class T, class FU, class FW>
+template <bool CARELESS=false, class T, class FU, class FW>
 inline bool readIntegerU(T& a, string_view& x, FU fu, FW fw) {
   string_view w;
   readTokenU(w, x, fu, fw);
-  if (w.empty()) return true;
+  if (!CARELESS && w.empty()) return true;
   T v = T();
   bool neg = w[0]=='-';
   if (w[0]=='-' || w[0]=='+') w.remove_prefix(1);
   for (auto c : w) {
-    if (isDigit(c)) v = v*10 + (c-'0');
+    if (CARELESS || isDigit(c)) v = v*10 + (c-'0');
     else return true;
   }
   a = neg? -v : v;
@@ -157,11 +160,11 @@ inline bool readIntegerU(T& a, string_view& x, FU fu, FW fw) {
   * @param fw is special whitespace, e.g. comma? (c)
   * @returns true if error occurred
   */
-template <class T, class FU, class FW>
+template <bool CARELESS=false, class T, class FU, class FW>
 inline bool readFloatU(T& a, string_view& x, FU fu, FW fw) {
   string_view w;
   readTokenU(w, x, fu, fw);
-  if (w.empty()) return true;
+  if (!CARELESS && w.empty()) return true;
   int64_t v = 0;
   bool neg = w[0]=='-';
   bool dot = false;
@@ -173,7 +176,7 @@ inline bool readFloatU(T& a, string_view& x, FU fu, FW fw) {
     else if (c=='.') dot = true;
     else if (c=='e' || c=='E') {
       w.remove_prefix(i+1);
-      if (readIntegerU(exp, w, fu, fw)) return true;
+      if (readIntegerU<CARELESS>(exp, w, fu, fw)) return true;
       break;
     }
     else return true;
@@ -192,12 +195,11 @@ inline bool readFloatU(T& a, string_view& x, FU fu, FW fw) {
  * @param fw is special whitespace, e.g. comma? (c)
  * @returns true if error occurred
  */
-template <class T, class FU, class FW>
+template <bool CARELESS=false, class T, class FU, class FW>
 inline bool readValueU(T& a, string_view& x, FU fu, FW fw) {
-  string_view w;
-  readTokenU(w, x, fu, fw);
-  auto [ptr, ec] = from_chars(w.begin(), w.end(), a);
-  return ec != std::errc();
+  if constexpr (is_integral<T>::value) return readIntegerU<CARELESS>(a, x, fu, fw);
+  else if constexpr (is_floating_point<T>::value) return readFloatU<CARELESS>(a, x, fu, fw);
+  else return true;
 }
 #pragma endregion
 #pragma endregion
