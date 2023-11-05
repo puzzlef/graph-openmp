@@ -31,20 +31,6 @@ inline I findNextLine(I ib, I ie) {
     if (*ib==EOL) return ++ib;
   return ie;
 }
-
-
-/**
- * Remove a line from string view.
- * @tparam EOL end of line character
- * @param x string view (updated)
- * @returns index to next line
- */
-template <char EOL='\n'>
-inline void dropLineU(string_view& x) {
-  auto xb = x.begin(), xe = x.end();
-  auto le = findNextLine<EOL>(xb, xe);
-  x.remove_prefix(le-xb);
-}
 #pragma endregion
 
 
@@ -67,19 +53,6 @@ inline I findNextWhitespace(I ib, I ie, FW fw) {
 
 
 /**
- * Remove non-whitespace characters from string view.
- * @param x string view (updated)
- * @param fw is special whitespace, e.g. comma? (c)
- */
-template <class FW>
-inline void dropNonWhitespacesU(string_view& x, FW fw) {
-  auto xb = x.begin(), xe = x.end();
-  auto wb = findNextWhitespace(xb, xe, fw);
-  x.remove_prefix(wb-xb);
-}
-
-
-/**
  * Find the next non-blank in a string.
  * @param ib begin iterator
  * @param ie end iterator
@@ -91,19 +64,6 @@ inline I findNextNonBlank(I ib, I ie, FU fu) {
   for (; ib<ie; ++ib)
     if (!isBlank(*ib) && !fu(*ib)) return ib;
   return ie;
-}
-
-
-/**
- * Remove blank characters from string view.
- * @param x string view (updated)
- * @param fu is special blank, e.g. comma? (c)
- */
-template <class FU>
-inline void dropBlanksU(string_view& x, FU fu) {
-  auto xb = x.begin(), xe = x.end();
-  auto we = findNextNonBlank(xb, xe, fu);
-  x.remove_prefix(we-xb);
 }
 #pragma endregion
 

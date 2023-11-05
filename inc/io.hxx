@@ -40,16 +40,19 @@ inline bool readCooFormatHeaderU(size_t& rows, size_t& cols, size_t& size, strin
   bool err = false;
   auto fu = [](char c) { return false; };
   auto fw = [](char c) { return false; };
+  auto ib = data.begin(), ie = data.end(), it = ib;
   // Skip past empty lines and comments.
-  for (; !data.empty(); dropLineU(data)) {
-    dropBlanksU(data, fu);
-    if (data[0]!='%' || data[0]!='#' || !isNewline(data[0])) break;
+  for (; it!=ie; it = findNextLine(it, ie)) {
+    it = findNextNonBlank(it, ie, fu);
+    if (*it!='%' || *it!='#' || !isNewline(*it)) break;
   }
   // Read rows, cols, size.
-  err |= readValueU(rows, data, fu, fw);  // Number of vertices
-  err |= readValueU(cols, data, fu, fw);  // Number of vertices
-  err |= readValueU(size, data, fu, fw);  // Number of edges
-  dropLineU(data);
+  err |= readValueU(rows, it, ie, fu, fw);  // Number of vertices
+  err |= readValueU(cols, it, ie, fu, fw);  // Number of vertices
+  err |= readValueU(size, it, ie, fu, fw);  // Number of edges
+  // Jump to the next line.
+  it = findNextLine(it, ie);
+  data.remove_prefix(it-ib);
   return err;
 }
 #pragma endregion
@@ -72,23 +75,27 @@ inline bool readMtxFormatHeaderU(bool& symmetric, size_t& rows, size_t& cols, si
   string_view h0, h1, h2, h3, h4;
   auto fu = [](char c) { return false; };
   auto fw = [](char c) { return false; };
+  auto ib = data.begin(), ie = data.end(), it = ib;
   // Skip past the comments and read the graph type.
-  for (; !data.empty(); dropLineU(data)) {
-    if (data.substr(0,  1)!="%") break;
-    if (data.substr(0, 14)!="%%MatrixMarket") continue;
-    readTokenU(h0, data, fu, fw);
-    readTokenU(h1, data, fu, fw);
-    readTokenU(h2, data, fu, fw);
-    readTokenU(h3, data, fu, fw);
-    readTokenU(h4, data, fu, fw);
+  for (; it!=ie; it = findNextLine(it, ie)) {
+    if (*ib!='%') break;
+    if (data.substr(it-ib, 14)!="%%MatrixMarket") continue;
+    readTokenU(h0, it, ie, fu, fw);
+    readTokenU(h1, it, ie, fu, fw);
+    readTokenU(h2, it, ie, fu, fw);
+    readTokenU(h3, it, ie, fu, fw);
+    readTokenU(h4, it, ie, fu, fw);
   }
+  // Check the graph type.
   if (h1!="matrix" || h2!="coordinate") { symmetric = false; rows = 0; cols = 0; size = 0; return true; }
   symmetric = h4=="symmetric" || h4=="skew-symmetric";
   // Read rows, cols, size.
-  err |= readValueU(rows, data, fu, fw);
-  err |= readValueU(cols, data, fu, fw);
-  err |= readValueU(size, data, fu, fw);
-  dropLineU(data);
+  err |= readValueU(rows, it, ie, fu, fw);
+  err |= readValueU(cols, it, ie, fu, fw);
+  err |= readValueU(size, it, ie, fu, fw);
+  // Jump to the next line.
+  it = findNextLine(it, ie);
+  data.remove_prefix(it-ib);
   return err;
 }
 #pragma endregion
@@ -110,16 +117,16 @@ inline bool readEdgelistFormatDoU(string_view& data, bool symmetric, bool weight
   bool err = false;
   auto fu = [](char c) { return c==','; };                      // Support CSV
   auto fw = [](char c) { return c==',' || c=='%' || c=='#'; };  // Support CSV, comments
-  for (; !data.empty(); dropLineU(data)) {
+  auto ib = data.begin(), ie = data.end(), it = ib;
+  for (; it!=ie; it = findNextLine(it, ie)) {
     // Skip past empty lines and comments.
-    dropBlanksU(data, fu);
-    const char& c = data[0];
-    if (c=='%' || c=='#' || isNewline(c)) continue;
+    it = findNextNonBlank(it, ie, fu);
+    if (*it=='%' || *it=='#' || isNewline(*it)) continue;
     // Read u, v, w (if weighted).
     size_t u = 0, v = 0; double w = 1;
-    err |= readValueU(u, data, fu, fw);  // Source vertex
-    err |= readValueU(v, data, fu, fw);  // Target vertex
-    if (weighted) err |= readValueU(w, data, fu, fw);  // Edge weight
+    err |= readValueU(u, it, ie, fu, fw);  // Source vertex
+    err |= readValueU(v, it, ie, fu, fw);  // Target vertex
+    if (weighted) err |= readValueU(w, it, ie, fu, fw);  // Edge weight
     fb(u, v, w);
     if (symmetric) fb(v, u, w);
   }
