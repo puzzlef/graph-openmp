@@ -61,7 +61,7 @@ inline void dropLineU(string_view& x) {
 template <class I, class FW>
 inline I findNextWhitespace(I ib, I ie, FW fw) {
   for (; ib<ie; ++ib)
-    if (isWhitespace(*ib) || fw(*ib)) return ib;
+    if (isBlank(*ib) || isNewline(*ib) || fw(*ib)) return ib;
   return ie;
 }
 
