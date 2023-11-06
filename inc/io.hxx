@@ -34,10 +34,10 @@ using std::getline;
  * @param cols number of columns (output)
  * @param size number of lines/edges (output)
  * @param data input file data (updated)
- * @returns true if error occurred
+ * @returns iterator to error in data
  */
-inline bool readCooFormatHeaderU(size_t& rows, size_t& cols, size_t& size, string_view& data) {
-  bool err = false;
+inline auto readCooFormatHeaderU(size_t& rows, size_t& cols, size_t& size, string_view& data) {
+  using I = decltype(data.begin());
   auto fu = [](char c) { return false; };
   auto fw = [](char c) { return false; };
   auto ib = data.begin(), ie = data.end(), it = ib;
@@ -47,13 +47,17 @@ inline bool readCooFormatHeaderU(size_t& rows, size_t& cols, size_t& size, strin
     if (*it!='%' || *it!='#' || !isNewline(*it)) break;
   }
   // Read rows, cols, size.
-  err |= readValueU(rows, it, ie, fu, fw);  // Number of vertices
-  err |= readValueU(cols, it, ie, fu, fw);  // Number of vertices
-  err |= readValueU(size, it, ie, fu, fw);  // Number of edges
+  I err = I();
+  do {
+    err = readNumberU<true>(rows, it, ie, fu, fw); if (err) break;  // Number of vertices
+    err = readNumberU<true>(cols, it, ie, fu, fw); if (err) break;  // Number of vertices
+    err = readNumberU<true>(size, it, ie, fu, fw);                  // Number of edges
+  } while (false);
+  if (err) return err;  // Error: Invalid COO format header
   // Jump to the next line.
   it = findNextLine(it, ie);
   data.remove_prefix(it-ib);
-  return err;
+  return I();
 }
 #pragma endregion
 
@@ -68,35 +72,39 @@ inline bool readCooFormatHeaderU(size_t& rows, size_t& cols, size_t& size, strin
  * @param cols number of columns (output)
  * @param size number of lines/edges (output)
  * @param data input file data (updated)
- * @returns true if error occurred
+ * @returns iterator to error in data
  */
-inline bool readMtxFormatHeaderU(bool& symmetric, size_t& rows, size_t& cols, size_t& size, string_view& data) {
-  bool err = false;
-  string_view h0, h1, h2, h3, h4;
+inline auto readMtxFormatHeaderU(bool& symmetric, size_t& rows, size_t& cols, size_t& size, string_view& data) {
+  using I = decltype(data.begin());
   auto fu = [](char c) { return false; };
   auto fw = [](char c) { return false; };
   auto ib = data.begin(), ie = data.end(), it = ib;
   // Skip past the comments and read the graph type.
+  string_view h0, h1, h2, h3, h4;
   for (; it!=ie; it = findNextLine(it, ie)) {
     if (*ib!='%') break;
     if (data.substr(it-ib, 14)!="%%MatrixMarket") continue;
-    readTokenU(h0, it, ie, fu, fw);
-    readTokenU(h1, it, ie, fu, fw);
-    readTokenU(h2, it, ie, fu, fw);
-    readTokenU(h3, it, ie, fu, fw);
-    readTokenU(h4, it, ie, fu, fw);
+    readTokenU(h0, it, ie, fu, fw);  // %%MatrixMarket
+    readTokenU(h1, it, ie, fu, fw);  // Graph
+    readTokenU(h2, it, ie, fu, fw);  // Format
+    readTokenU(h3, it, ie, fu, fw);  // Field
+    readTokenU(h4, it, ie, fu, fw);  // Symmetry
   }
   // Check the graph type.
-  if (h1!="matrix" || h2!="coordinate") { symmetric = false; rows = 0; cols = 0; size = 0; return true; }
+  if (h1!="matrix" || h2!="coordinate") return ib;  // Error: Invalid MTX format header
   symmetric = h4=="symmetric" || h4=="skew-symmetric";
   // Read rows, cols, size.
-  err |= readValueU(rows, it, ie, fu, fw);
-  err |= readValueU(cols, it, ie, fu, fw);
-  err |= readValueU(size, it, ie, fu, fw);
+  I err = I();
+  do {
+    err = readNumberU<true>(rows, it, ie, fu, fw); if (err) break;  // Number of vertices
+    err = readNumberU<true>(cols, it, ie, fu, fw); if (err) break;  // Number of vertices
+    err = readNumberU<true>(size, it, ie, fu, fw);                  // Number of edges
+  } while (false);
+  if (err) return err;  // Error: Invalid MTX format header
   // Jump to the next line.
   it = findNextLine(it, ie);
   data.remove_prefix(it-ib);
-  return err;
+  return I();
 }
 #pragma endregion
 
@@ -106,31 +114,35 @@ inline bool readMtxFormatHeaderU(bool& symmetric, size_t& rows, size_t& cols, si
 #pragma region READ EDGELIST FORMAT
 /**
  * Read an EdgeList format file.
+ * @tparam CHECK check for error?
  * @param data input file data (updated)
  * @param symmetric is graph symmetric
  * @param weighted is graph weighted
  * @param fb on body line (u, v, w)
- * @returns true if error occurred
+ * @returns iterator to error in data
  */
-template <class FB>
-inline bool readEdgelistFormatDoU(string_view& data, bool symmetric, bool weighted, FB fb) {
-  bool err = false;
+template <bool CHECK=false, class FB>
+inline auto readEdgelistFormatDoU(string_view& data, bool symmetric, bool weighted, FB fb) {
+  using I = decltype(data.begin());
   auto fu = [](char c) { return c==','; };                      // Support CSV
   auto fw = [](char c) { return c==',' || c=='%' || c=='#'; };  // Support CSV, comments
   auto ib = data.begin(), ie = data.end(), it = ib;
+  I err = I();
   for (; it!=ie; it = findNextLine(it, ie)) {
     // Skip past empty lines and comments.
     it = findNextNonBlank(it, ie, fu);
     if (*it=='%' || *it=='#' || isNewline(*it)) continue;
     // Read u, v, w (if weighted).
     size_t u = 0, v = 0; double w = 1;
-    err |= readValueU(u, it, ie, fu, fw);  // Source vertex
-    err |= readValueU(v, it, ie, fu, fw);  // Target vertex
-    if (weighted) err |= readValueU(w, it, ie, fu, fw);  // Edge weight
+    err = readNumberU<CHECK>(u, it, ie, fu, fw); if (CHECK && err) break;  // Source vertex
+    err = readNumberU<CHECK>(v, it, ie, fu, fw); if (CHECK && err) break;  // Target vertex
+    if (weighted) { err = readNumberU<CHECK>(w, it, ie, fu, fw); if (CHECK && err) break; }  // Edge weight
     fb(u, v, w);
     if (symmetric) fb(v, u, w);
   }
-  return err;
+  if (err) return err;  // Error: Invalid EdgeList format body
+  data.remove_prefix(it-ib);
+  return I();
 }
 
 
@@ -142,7 +154,7 @@ inline bool readEdgelistFormatDoU(string_view& data, bool symmetric, bool weight
  * @param B block size
  * @returns characters to process for a block
  */
-inline string_view readEdgelistFormatBlock(const string_view& data, size_t b, size_t B) {
+inline string_view readEdgelistFormatBlock(string_view data, size_t b, size_t B) {
   auto db = data.begin(), de = data.end();
   auto bb = db+b, be = min(bb+B, de);
   if (bb!=db && !isNewline(*bb-1)) bb = findNextLine(bb, de);
@@ -152,87 +164,34 @@ inline string_view readEdgelistFormatBlock(const string_view& data, size_t b, si
 
 
 /**
- * Read an EdgeList format file in separate threads.
- * @param data input file data (updated)
- * @param symmetric is graph symmetric
- * @param weighted is graph weighted
- * @param fb on body line (u, v, w)
- * @returns true if error occurred
- */
-template <class FB>
-inline bool readEdgelistFormatSeparateDoOmpU(string_view& data, bool symmetric, bool weighted, FB fb) {
-  bool err = false;
-  const int T = omp_get_max_threads();
-  const size_t DATA  = data.size();
-  const size_t BLOCK = 4096;             // Characters per block (1 page)
-  const size_t GRID  = 128 * T * BLOCK;  // Characters per grid (128T pages)
-  // Process COO file in grids.
-  for (size_t g=0; g<DATA; g+=GRID) {
-    size_t B = min(g+GRID, DATA);
-    // Process a grid in parallel with dynamic scheduling.
-    #pragma omp parallel for schedule(dynamic, 1)
-    for (size_t b=g; b<B; b+=BLOCK) {
-      string_view bdata = readEdgelistFormatBlock(data, b, BLOCK);
-      err |= readEdgelistFormatDoU(bdata, weighted, symmetric, fb);
-    }
-  }
-  data.remove_prefix(DATA);
-  return err;
-}
-
-
-/**
  * Read an EdgeList format file.
+ * @tparam CHECK check for error?
  * @param data input file data (updated)
  * @param symmetric is graph symmetric
  * @param weighted is graph weighted
  * @param fb on body line (u, v, w)
- * @returns true if error occurred
+ * @returns iterator to error in data
  */
-template <class FB>
-inline bool readEdgelistFormatDoOmpU(string_view& data, bool symmetric, bool weighted, FB fb) {
-  using EDGE = tuple<size_t, size_t, double>;
-  bool err = false;
+template <bool CHECK=false, class FB>
+inline void readEdgelistFormatDoOmpU(string_view& data, bool symmetric, bool weighted, FB fb) {
+  using I = decltype(data.begin());
   const int T = omp_get_max_threads();
   const size_t DATA  = data.size();
   const size_t BLOCK = 4096;             // Characters per block (1 page)
   const size_t GRID  = 128 * T * BLOCK;  // Characters per grid (128T pages)
-  // Allocate memory for buffering edges.
-  vector<vector<EDGE>*> edges(T);
-  for (int t=0; t<T; ++t) {
-    edges[t] = new vector<EDGE>();
-    edges[t]->reserve(GRID/(4*T));
-  }
+  I err = I();
   // Process COO file in grids.
   for (size_t g=0; g<DATA; g+=GRID) {
     size_t B = min(g+GRID, DATA);
     // Process a grid in parallel with dynamic scheduling.
-    #pragma omp parallel for schedule(dynamic, 1) reduction(|:err) num_threads(32)
+    #pragma omp parallel for schedule(dynamic, 1) shared(err)
     for (size_t b=g; b<B; b+=BLOCK) {
-      int t = omp_get_thread_num();
       string_view bdata = readEdgelistFormatBlock(data, b, BLOCK);
-      auto fc = [&](auto u, auto v, auto w) { edges[t]->emplace_back(u, v, w); };
-      err |= readEdgelistFormatDoU(bdata, weighted, symmetric, fc);
+      I berr = readEdgelistFormatDoU<CHECK>(bdata, weighted, symmetric, fb);
+      if (CHECK && berr && !err) err = berr;  // Error: Invalid EdgeList format body
     }
-    // Perform on body operation for each read edge.
-    #pragma omp parallel num_threads(32)
-    {
-      for (int t=0; t<T; ++t) {
-        for (auto [u, v, w] : *edges[t]) {
-          fb(u, v, w);
-          if (symmetric) fb(v, u, w);
-        }
-      }
-    }
-    // Clear read edges.
-    for (int t=0; t<T; ++t)
-      edges[t]->clear();
   }
-  // Free allocated memory for buffering edges.
-  for (int t=0; t<T; ++t)
-    delete edges[t];
   data.remove_prefix(DATA);
-  return err;
 }
 #endif
 #pragma endregion
@@ -253,13 +212,13 @@ inline bool readEdgelistFormatDoOmpU(string_view& data, bool symmetric, bool wei
 template <class FH, class FB>
 inline bool readCooFormatDo(string_view data, bool symmetric, bool weighted, FH fh, FB fb) {
   bool err = false;
-  size_t rows, cols, size;
-  err |= readCooFormatHeaderU(rows, cols, size, data);
-  if (err) return err;
-  fh(rows, cols, size);
-  size_t n = max(rows, cols);
-  if (n==0) return err;  // Empty graph
-  err |= readEdgelistFormatDoU(data, symmetric, weighted, fb);
+  // size_t rows, cols, size;
+  // err |= readCooFormatHeaderU(rows, cols, size, data);
+  // if (err) return err;
+  // fh(rows, cols, size);
+  // size_t n = max(rows, cols);
+  // if (n==0) return err;  // Empty graph
+  // err |= readEdgelistFormatDoU(data, symmetric, weighted, fb);
   return err;
 }
 
@@ -277,13 +236,13 @@ inline bool readCooFormatDo(string_view data, bool symmetric, bool weighted, FH 
 template <class FH, class FB>
 inline bool readCooFormatDoOmp(string_view data, bool symmetric, bool weighted, FH fh, FB fb) {
   bool err = false;
-  size_t rows, cols, size;
-  err |= readCooFormatHeaderU(rows, cols, size, data);
-  if (err) return err;
-  fh(rows, cols, size);
-  size_t n = max(rows, cols);
-  if (n==0) return err;  // Empty graph
-  err |= readEdgelistFormatDoOmpU(data, symmetric, weighted, fb);
+  // size_t rows, cols, size;
+  // err |= readCooFormatHeaderU(rows, cols, size, data);
+  // if (err) return err;
+  // fh(rows, cols, size);
+  // size_t n = max(rows, cols);
+  // if (n==0) return err;  // Empty graph
+  // err |= readEdgelistFormatDoOmpU(data, symmetric, weighted, fb);
   return err;
 }
 #endif
@@ -304,13 +263,13 @@ inline bool readCooFormatDoOmp(string_view data, bool symmetric, bool weighted, 
 template <class FH, class FB>
 inline bool readMtxFormatDo(string_view data, bool weighted, FH fh, FB fb) {
   bool err = false;
-  bool symmetric; size_t rows, cols, size;
-  err |= readMtxFormatHeaderU(symmetric, rows, cols, size, data);
-  if (err) return err;
-  fh(symmetric, rows, cols, size);
-  size_t n = max(rows, cols);
-  if (n==0) return err;  // Empty graph
-  err |= readEdgelistFormatDoU(data, symmetric, weighted, fb);
+  // bool symmetric; size_t rows, cols, size;
+  // err |= readMtxFormatHeaderU(symmetric, rows, cols, size, data);
+  // if (err) return err;
+  // fh(symmetric, rows, cols, size);
+  // size_t n = max(rows, cols);
+  // if (n==0) return err;  // Empty graph
+  // err |= readEdgelistFormatDoU(data, symmetric, weighted, fb);
   return err;
 }
 
@@ -327,13 +286,13 @@ inline bool readMtxFormatDo(string_view data, bool weighted, FH fh, FB fb) {
 template <class FH, class FB>
 inline bool readMtxFormatDoOmp(string_view data, bool weighted, FH fh, FB fb) {
   bool err = false;
-  bool symmetric; size_t rows, cols, size;
-  err |= readMtxFormatHeaderU(symmetric, rows, cols, size, data);
-  if (err) return err;
-  fh(symmetric, rows, cols, size);
-  size_t n = max(rows, cols);
-  if (n==0) return err;
-  err |= readEdgelistFormatDoOmpU(data, symmetric, weighted, fb);
+  // bool symmetric; size_t rows, cols, size;
+  // err |= readMtxFormatHeaderU(symmetric, rows, cols, size, data);
+  // if (err) return err;
+  // fh(symmetric, rows, cols, size);
+  // size_t n = max(rows, cols);
+  // if (n==0) return err;
+  // err |= readEdgelistFormatDoOmpU(data, symmetric, weighted, fb);
   return err;
 }
 #endif

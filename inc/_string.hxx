@@ -48,6 +48,21 @@ inline I findNextWhitespace(I ib, I ie, FW fw) {
 
 
 /**
+ * Find the next blank in a string.
+ * @param ib begin iterator
+ * @param ie end iterator
+ * @param fu is special blank, e.g. comma? (c)
+ * @returns iterator to next blank
+ */
+template <class I, class FU>
+inline I findNextBlank(I ib, I ie, FU fu) {
+  for (; ib<ie; ++ib)
+    if (isBlank(*ib) || fu(*ib)) return ib;
+  return ie;
+}
+
+
+/**
  * Find the next non-blank in a string.
  * @param ib begin iterator
  * @param ie end iterator
@@ -59,6 +74,19 @@ inline I findNextNonBlank(I ib, I ie, FU fu) {
   for (; ib<ie; ++ib)
     if (!isBlank(*ib) && !fu(*ib)) return ib;
   return ie;
+}
+
+
+/**
+ * Find the next digit in a string.
+ * @param ib begin iterator
+ * @param ie end iterator
+ * @returns iterator to next digit
+ */
+template <class I>
+inline I findNextDigit(I ib, I ie) {
+  for (; ib!=ie && !isDigit(*ib); ++ib);
+  return ib;
 }
 
 
