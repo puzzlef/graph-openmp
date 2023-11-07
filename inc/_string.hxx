@@ -6,6 +6,7 @@
 #include <x86intrin.h>
 #include "_debug.hxx"
 #include "_cctype.hxx"
+#include "_exception.hxx"
 
 using std::is_integral;
 using std::is_floating_point;
@@ -43,6 +44,21 @@ template <class I, class FW>
 inline I findNextWhitespace(I ib, I ie, FW fw) {
   for (; ib<ie; ++ib)
     if (isBlank(*ib) || isNewline(*ib) || fw(*ib)) return ib;
+  return ie;
+}
+
+
+/**
+ * Find the next non-whitespace in a string.
+ * @param ib begin iterator
+ * @param ie end iterator
+ * @param fw is special whitespace, e.g. comma? (c)
+ * @returns iterator to next non-whitespace
+ */
+template <class I, class FW>
+inline I findNextNonWhitespace(I ib, I ie, FW fw) {
+  for (; ib<ie; ++ib)
+    if (!isBlank(*ib) && !isNewline(*ib) && !fw(*ib)) return ib;
   return ie;
 }
 
@@ -113,7 +129,7 @@ inline I findNextNonDigit(I ib, I ie) {
  */
 template <class I, class FU, class FW>
 inline pair<I, I> findNextToken(I ib, I ie, FU fu, FW fw) {
-  auto tb = findNextNonBlank(ib, ie, fu);
+  auto tb = findNextNonWhitespace(ib, ie, fu);  // findNextNonBlank
   auto te = findNextWhitespace(tb+1, ie, fw);
   return {tb, te};
 }
@@ -327,6 +343,26 @@ inline I parseNumberSimdW(T& a, I ib, I ie) {
 
 
 #pragma region READ TOKEN
+/**
+ * Obtain the next number from a string.
+ * @tparam CHECK check for error?
+ * @param a obtained number (output)
+ * @param ib begin iterator (updated)
+ * @param ie end iterator
+ * @param fu is special blank, e.g. comma? (c)
+ * @param fw is special whitespace, e.g. comma? (c)
+ * @returns iterator to end of number, or error
+ */
+template <bool CHECK=false, class T, class I, class FU, class FW>
+inline I scanNumberThrowerW(T& a, I ib, I ie, FU fu, FW fw) {
+  auto [tb, te] = findNextToken(ib, ie, fu, fw);
+  // if constexpr (CHECK) { if (tb==te) { printf("Cant scan empty number, %c\n", *tb); return te; } }
+  tb = parseNumberSimdW<CHECK? 2:1>(a, tb, te);
+  if constexpr (CHECK) { if (tb!=te) { printf("Number to scan is in bad format, %c\n", *tb); return te; } }
+  return te;
+}
+
+
 /**
  * Obtain the next token from a string.
  * @tparam CHECK check for error?

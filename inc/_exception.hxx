@@ -16,8 +16,10 @@ using std::exception;
  */
 class FormatException : public exception {
   #pragma region DATA
+  /** Error message. */
+  const char *msg;
   /** Pointer to the character where format check fails. */
-  const char *it;
+  const void *it;
   #pragma endregion
 
   public:
@@ -29,15 +31,23 @@ class FormatException : public exception {
    */
   template <class I>
   FormatException(const char *msg, I it) :
-  exception(msg), it(&*it) {}
+  msg(msg), it(&*it) {}
   #pragma endregion
 
   #pragma region METHODS
   /**
+   * Get error message.
+   * @returns error message
+   */
+  inline const char* what() const noexcept override {
+    return msg;
+  }
+
+  /**
    * Get pointer to the character where format check fails.
    * @returns pointer to the character
    */
-  inline const char* where() const noexcept {
+  inline const void* where() const noexcept {
     return it;
   }
   #pragma endregion

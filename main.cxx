@@ -55,6 +55,8 @@ inline size_t readFloatsOmp(uint32_t **edges, const uint8_t *data, size_t N) {
   size_t i = 0;
   const uint8_t *ib = data;
   const uint8_t *ie = data + N;
+  auto fu = [](char c) { return false; };
+  auto fw = [](char c) { return false; };
   #pragma omp parallel for schedule(dynamic, 1) reduction(+:i)
   for (size_t b=0; b<N; b+=BLOCK) {
     int t = omp_get_thread_num();
@@ -65,7 +67,7 @@ inline size_t readFloatsOmp(uint32_t **edges, const uint8_t *data, size_t N) {
     while (bb<be) {
       bb = findNextDigit(bb, be);
       // if (bb<be) { bb = findNextNonDigit(bb, be); i++; }
-      if (bb<be) bb = parseNumberSimdW(edges[t][i++], bb, be);
+      bb = scanNumberThrowerW<false>(edges[t][i++], bb, be, fu, fw);
     }
   }
   return i;
@@ -106,6 +108,54 @@ int main(int argc, char **argv) {
   // Free memory.
   for (size_t t=0; t<T; ++t)
     freeMemoryMmap(numbers[t], sizeof(uint32_t) * size / 4);
+  unmapFileFromMemory(fd, addr, size);
+  printf("\n");
+  return 0;
+}
+
+
+int mainNew(int argc, char **argv) {
+  char *file = argv[1];
+  bool  PAR  = argc>2 ? atoi(argv[2]) : 1;  // 0=serial, 1=parallel
+  omp_set_num_threads(MAX_THREADS);
+  printf("OMP_NUM_THREADS=%d\n", MAX_THREADS);
+  auto [fd, addr, size] = mapFileToMemory(file);
+  int T = PAR? MAX_THREADS : 1;
+  vector<uint32_t*> sources(T);
+  vector<uint32_t*> targets(T);
+  vector<size_t*>   indices(T);
+  for (size_t t=0; t<T; ++t) {
+    sources[t] = (uint32_t*) allocateMemoryMmap(sizeof(uint32_t) * size / 4);
+    targets[t] = (uint32_t*) allocateMemoryMmap(sizeof(uint32_t) * size / 4);
+    indices[t] = new size_t[1];
+  }
+  printf("Reading edgelist in file %s ...\n", file);
+  string_view data((const char*) addr, size);
+  bool symmetric, weighted = false;
+  size_t rows, cols;
+  auto fbs = [&](auto u, auto v, auto w) {
+    size_t i = indices[0][0]++;
+    sources[0][i] = u;
+    targets[0][i] = v;
+  };
+  auto fbp = [&](auto u, auto v, auto w) {
+    int t = omp_get_thread_num();
+    size_t i = indices[t][0]++;
+    sources[t][i] = u;
+    targets[t][i] = v;
+  };
+  readMtxFormatHeaderU(symmetric, rows, cols, size, data);
+  double tr = measureDuration([&]() {
+    if (PAR) readEdgelistFormatDoOmpU(data, symmetric, weighted, fbs);
+    else     readEdgelistFormatDoU   (data, symmetric, weighted, fbp);
+  });
+  printf("{%09.1fms} %s\n", tr, PAR? "readNumbersOmp" : "readNumbers");
+  // Free memory.
+  for (size_t t=0; t<T; ++t) {
+    freeMemoryMmap(sources[t], sizeof(uint32_t) * size / 4);
+    freeMemoryMmap(targets[t], sizeof(uint32_t) * size / 4);
+    delete indices[t];
+  }
   unmapFileFromMemory(fd, addr, size);
   printf("\n");
   return 0;
