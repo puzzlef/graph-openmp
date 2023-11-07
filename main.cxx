@@ -86,12 +86,12 @@ int mainOld(int argc, char **argv) {
   omp_set_num_threads(MAX_THREADS);
   printf("OMP_NUM_THREADS=%d\n", MAX_THREADS);
   // Map file to memory.
-  auto [fd, addr, size] = mapFileToMemory(file);
+  auto [fd, addr, size] = mmapOpenFile(file);
   // Allocate memory for storing converted numbers (overallocate 64K pages).
   int  T = PAR? MAX_THREADS : 1;
   vector<uint32_t*> numbers(T);
   for (size_t t=0; t<T; ++t)
-    numbers[t] = (uint32_t*) allocateMemoryMmap(sizeof(uint32_t) * size / 4);
+    numbers[t] = (uint32_t*) mmapAlloc(sizeof(uint32_t) * size / 4);
   printf("Counting and converting numbers in file %s ...\n", file);
   size_t n = 0;
   double tr = measureDuration([&]() {
@@ -107,8 +107,8 @@ int mainOld(int argc, char **argv) {
   printf("{%09.1fms, n=%zu} %s\n", tr, n, PAR? "readNumbersOmp" : "readNumbers");
   // Free memory.
   for (size_t t=0; t<T; ++t)
-    freeMemoryMmap(numbers[t], sizeof(uint32_t) * size / 4);
-  unmapFileFromMemory(fd, addr, size);
+    mmapFree(numbers[t], sizeof(uint32_t) * size / 4);
+  mmapCloseFile(fd, addr, size);
   printf("\n");
   return 0;
 }
@@ -116,40 +116,47 @@ int mainOld(int argc, char **argv) {
 
 int main(int argc, char **argv) {
   char *file = argv[1];
-  bool  PAR  = argc>2 ? atoi(argv[2]) : 1;  // 0=serial, 1=parallel
+  bool  PAR  = argc>2 ? atoi(argv[2]) : 0;  // 0=serial, 1=parallel
   omp_set_num_threads(MAX_THREADS);
   printf("OMP_NUM_THREADS=%d\n", MAX_THREADS);
-  auto [fd, addr, size] = mapFileToMemory(file);
+  MappedFile mf(file);
+  size_t size = mf.size();
   int T = PAR? MAX_THREADS : 1;
-  vector<uint32_t*> us(T);
-  vector<uint32_t*> vs(T);
-  vector<float*>    ws(T);
-  vector<uint32_t*> degs(T);
+  vector<uint32_t*> sources(T);
+  vector<uint32_t*> targets(T);
+  vector<float*>    weights(T);
+  vector<uint32_t*> degrees(T);
+  vector<unique_ptr<size_t>> counts;
   for (size_t t=0; t<T; ++t) {
-    us[t] = (uint32_t*) allocateMemoryMmap(sizeof(uint32_t) * size / 4);
-    vs[t] = (uint32_t*) allocateMemoryMmap(sizeof(uint32_t) * size / 4);
-    ws[t] = (float*)    allocateMemoryMmap(sizeof(float)    * size / 4);
-    degs[t] = (uint32_t*) allocateMemoryMmap(sizeof(uint32_t) * size / 4);
+    sources[t] = (uint32_t*) mmapAlloc(sizeof(uint32_t) * size / 4);
+    targets[t] = (uint32_t*) mmapAlloc(sizeof(uint32_t) * size / 4);
+    weights[t] = (float*)    mmapAlloc(sizeof(float)    * size / 4);
+    degrees[t] = (uint32_t*) mmapAlloc(sizeof(uint32_t) * size / 4);
   }
   printf("Reading edgelist in file %s ...\n", file);
-  string_view data((const char*) addr, size);
+  string_view data((const char*) mf.data(), mf.size());
   bool symmetric, weighted = false;
   size_t rows, cols, edges, m = 0;
   size_t head = readMtxFormatHeaderW(symmetric, rows, cols, edges, data);
   data.remove_prefix(head);
+  MappedPtr<size_t>   offsets(rows+1);
+  MappedPtr<uint32_t> edgeKeys(edges);
+  MappedPtr<float>    edgeValues(edges);
   double tr = measureDuration([&]() {
-    if (PAR) m = readEdgelistFormatOmpU(us.data(), vs.data(), ws.data(), degs.data(), data, symmetric, weighted);
-    else     m = readEdgelistFormatU(us[0], vs[0], ws[0], degs[0], data, symmetric, weighted);
+    if (PAR) counts = readEdgelistFormatOmpU(sources.data(), targets.data(), weights.data(), (uint32_t**) nullptr, data, symmetric, weighted);
+    else     m = readEdgelistFormatU(sources[0], targets[0], weights[0], degrees[0], data, symmetric, weighted);
+    // csrCreateFromEdgelistOmpU((size_t*) offsets.data(), (uint32_t*) edgeKeys.data(), (float*) edgeValues.data(), (uint32_t**) degrees.data(), (const uint32_t**) sources.data(), (const uint32_t**) targets.data(), (const float**) weights.data(), (const size_t*) counts.data(), rows);
   });
   printf("{%09.1fms, m=%zu, size=%zu} %s\n", tr, m, edges, PAR? "readEdgesOmp" : "readEdges");
+  csrCreateFromEdgelistW((size_t*) offsets.data(), (uint32_t*) edgeKeys.data(), (float*) edgeValues.data(), degrees[0], sources[0], targets[0], weights[0], rows, m);
+  printf("Created CSR graph with %zu nodes and %zu edges.\n", rows, m);
   // Free memory.
   for (size_t t=0; t<T; ++t) {
-    freeMemoryMmap(us[t], sizeof(uint32_t) * size / 4);
-    freeMemoryMmap(vs[t], sizeof(uint32_t) * size / 4);
-    freeMemoryMmap(ws[t], sizeof(float)    * size / 4);
-    freeMemoryMmap(degs[t], sizeof(uint32_t) * size / 4);
+    mmapFree(sources[t], sizeof(uint32_t) * size / 4);
+    mmapFree(targets[t], sizeof(uint32_t) * size / 4);
+    mmapFree(weights[t], sizeof(float)    * size / 4);
+    mmapFree(degrees[t], sizeof(uint32_t) * size / 4);
   }
-  unmapFileFromMemory(fd, addr, size);
   printf("\n");
   return 0;
 }

@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 #include <tuple>
 #include <string>
 #include <string_view>
@@ -14,6 +15,7 @@
 #include <omp.h>
 #endif
 
+using std::unique_ptr;
 using std::tuple;
 using std::string;
 using std::string_view;
@@ -21,9 +23,9 @@ using std::vector;
 using std::istream;
 using std::istringstream;
 using std::ifstream;
+using std::make_unique;
 using std::min;
 using std::max;
-using std::getline;
 
 
 
@@ -178,25 +180,25 @@ inline void readEdgelistFormatDo(string_view data, bool symmetric, bool weighted
 /**
  * Read an EdgeList format file, and record the edges and vertex degrees.
  * @tparam CHECK check for error?
- * @param us source vertices (output)
- * @param vs target vertices (output)
- * @param ws edge weights (output)
- * @param degs vertex degrees (updated, must be initialized, optional)
+ * @param sources source vertices (output)
+ * @param targets target vertices (output)
+ * @param weights edge weights (output)
+ * @param degrees vertex degrees (updated, must be initialized, optional)
  * @param data input file data
  * @param symmetric is graph symmetric
  * @param weighted is graph weighted
  * @returns number of edges read
  */
 template <bool CHECK=false, class K, class E>
-inline size_t readEdgelistFormatU(K *us, K *vs, E *ws, K *degs, string_view data, bool symmetric, bool weighted) {
+inline size_t readEdgelistFormatU(K *sources, K *targets, E *weights, K *degrees, string_view data, bool symmetric, bool weighted) {
   size_t i = 0;
   readEdgelistFormatDo<CHECK>(data, symmetric, weighted, [&](auto u, auto v, auto w) {
     // Record the edge.
-    us[i] = u;
-    vs[i] = v;
-    if (weighted) ws[i] = w;
+    sources[i] = u;
+    targets[i] = v;
+    if (weighted) weights[i] = w;
     // Update degree of source vertex.
-    if (degs) ++degs[u];
+    if (degrees) ++degrees[u];
     ++i;
   });
   // Return number of edges.
@@ -224,25 +226,25 @@ inline string_view readEdgelistFormatBlock(string_view data, size_t b, size_t B)
 /**
  * Read an EdgeList format file, and record the edges and vertex degrees.
  * @tparam CHECK check for error?
- * @param us per-thread source vertices (output)
- * @param vs per-thread target vertices (output)
- * @param ws per-thread edge weights (output)
- * @param degs per-thread vertex degrees (updated, must be initialized, optional)
+ * @param sources per-thread source vertices (output)
+ * @param targets per-thread target vertices (output)
+ * @param weights per-thread edge weights (output)
+ * @param degrees per-thread vertex degrees (updated, must be initialized, optional)
  * @param data input file data
  * @param symmetric is graph symmetric
  * @param weighted is graph weighted
- * @returns number of edges read
+ * @returns total number of edges read
  */
 template <bool CHECK=false, class K, class E>
-inline size_t readEdgelistFormatOmpU(K** us, K** vs, E** ws, K** degs, string_view data, bool symmetric, bool weighted) {
+inline vector<unique_ptr<size_t>> readEdgelistFormatOmpU(K **sources, K **targets, E **weights, K **degrees, string_view data, bool symmetric, bool weighted) {
   const size_t DATA  = data.size();
   const size_t BLOCK = 256 * 1024;  // Characters per block (256KB)
   const int T = omp_get_max_threads();
   FormatError err;  // Common error
   // Allocate space for per-thread index.
-  vector<size_t*> is(T);
+  vector<unique_ptr<size_t>> is(T);
   for (int t=0; t<T; ++t)
-    is[t] = new size_t();
+    is[t] = make_unique<size_t>();
   // Process a grid in parallel with dynamic scheduling.
   #pragma omp parallel for schedule(dynamic, 1) shared(err)
   for (size_t b=0; b<DATA; b+=BLOCK) {
@@ -255,11 +257,11 @@ inline size_t readEdgelistFormatOmpU(K** us, K** vs, E** ws, K** degs, string_vi
     string_view bdata = readEdgelistFormatBlock(data, b, BLOCK);
     auto fb = [&](auto u, auto v, auto w) {
       // Record the edge.
-      us[t][i] = u;
-      vs[t][i] = v;
-      if (weighted) ws[t][i] = w;
+      sources[t][i] = u;
+      targets[t][i] = v;
+      if (weighted) weights[t][i] = w;
       // Update degree of source vertex.
-      if (degs) ++degs[t][u];
+      if (degrees) ++degrees[t][u];
       ++i;
     };
     if constexpr (CHECK) {
@@ -270,17 +272,17 @@ inline size_t readEdgelistFormatOmpU(K** us, K** vs, E** ws, K** degs, string_vi
     // Update per-thread index.
     *is[t] = i;
   }
-  // Get total number of edges.
-  size_t m = 0;
-  for (int t=0; t<T; ++t)
-    m += *is[t];
-  // Free space for per-thread index.
-  for (int t=0; t<T; ++t)
-    delete is[t];
+  // Update counts, and get total number of edges.
+  // size_t m = 0;
+  // for (int t=0; t<T; ++t) {
+  //   size_t i = *is[t];
+  //   if (counts) counts[t] = i;
+  //   m += i;
+  // }
   // Throw error if any.
   if (CHECK && !err.empty()) throw err;
   // Return number of edges.
-  return m;
+  return is;
 }
 #endif
 #pragma endregion
