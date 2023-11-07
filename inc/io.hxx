@@ -2,6 +2,7 @@
 #include <tuple>
 #include <string>
 #include <string_view>
+#include <vector>
 #include <istream>
 #include <sstream>
 #include <fstream>
@@ -16,6 +17,7 @@
 using std::tuple;
 using std::string;
 using std::string_view;
+using std::vector;
 using std::istream;
 using std::istringstream;
 using std::ifstream;
@@ -33,11 +35,10 @@ using std::getline;
  * @param rows number of rows (output)
  * @param cols number of columns (output)
  * @param size number of lines/edges (output)
- * @param data input file data (updated)
- * @returns iterator to error in data
+ * @param data input file data
+ * @returns size of header
  */
-inline auto readCooFormatHeaderU(size_t& rows, size_t& cols, size_t& size, string_view& data) {
-  using I = decltype(data.begin());
+inline size_t readCooFormatHeaderW(size_t& rows, size_t& cols, size_t& size, string_view data) {
   auto fu = [](char c) { return false; };
   auto fw = [](char c) { return false; };
   auto ib = data.begin(), ie = data.end(), it = ib;
@@ -47,17 +48,12 @@ inline auto readCooFormatHeaderU(size_t& rows, size_t& cols, size_t& size, strin
     if (*it!='%' || *it!='#' || !isNewline(*it)) break;
   }
   // Read rows, cols, size.
-  I err = I();
-  do {
-    err = readNumberU<true>(rows, it, ie, fu, fw); if (err) break;  // Number of vertices
-    err = readNumberU<true>(cols, it, ie, fu, fw); if (err) break;  // Number of vertices
-    err = readNumberU<true>(size, it, ie, fu, fw);                  // Number of edges
-  } while (false);
-  if (err) return err;  // Error: Invalid COO format header
+  it = readNumberW<true>(rows, it, ie, fu, fw);  // Number of vertices
+  it = readNumberW<true>(cols, it, ie, fu, fw);  // Number of vertices
+  it = readNumberW<true>(size, it, ie, fu, fw);  // Number of edges
   // Jump to the next line.
   it = findNextLine(it, ie);
-  data.remove_prefix(it-ib);
-  return I();
+  return it-ib;
 }
 #pragma endregion
 
@@ -71,40 +67,34 @@ inline auto readCooFormatHeaderU(size_t& rows, size_t& cols, size_t& size, strin
  * @param rows number of rows (output)
  * @param cols number of columns (output)
  * @param size number of lines/edges (output)
- * @param data input file data (updated)
- * @returns iterator to error in data
+ * @param data input file data
+ * @returns size of header
  */
-inline auto readMtxFormatHeaderU(bool& symmetric, size_t& rows, size_t& cols, size_t& size, string_view& data) {
-  using I = decltype(data.begin());
+inline auto readMtxFormatHeaderW(bool& symmetric, size_t& rows, size_t& cols, size_t& size, string_view data) {
   auto fu = [](char c) { return false; };
   auto fw = [](char c) { return false; };
   auto ib = data.begin(), ie = data.end(), it = ib;
   // Skip past the comments and read the graph type.
   string_view h0, h1, h2, h3, h4;
   for (; it!=ie; it = findNextLine(it, ie)) {
-    if (*ib!='%') break;
+    if (*it!='%') break;
     if (data.substr(it-ib, 14)!="%%MatrixMarket") continue;
-    readTokenU(h0, it, ie, fu, fw);  // %%MatrixMarket
-    readTokenU(h1, it, ie, fu, fw);  // Graph
-    readTokenU(h2, it, ie, fu, fw);  // Format
-    readTokenU(h3, it, ie, fu, fw);  // Field
-    readTokenU(h4, it, ie, fu, fw);  // Symmetry
+    it = readTokenW(h0, it, ie, fu, fw);  // %%MatrixMarket
+    it = readTokenW(h1, it, ie, fu, fw);  // Graph
+    it = readTokenW(h2, it, ie, fu, fw);  // Format
+    it = readTokenW(h3, it, ie, fu, fw);  // Field
+    it = readTokenW(h4, it, ie, fu, fw);  // Symmetry
   }
   // Check the graph type.
-  if (h1!="matrix" || h2!="coordinate") return ib;  // Error: Invalid MTX format header
+  if (h1!="matrix" || h2!="coordinate") throw FormatError("Invalid MTX header (unknown format)", ib);
   symmetric = h4=="symmetric" || h4=="skew-symmetric";
   // Read rows, cols, size.
-  I err = I();
-  do {
-    err = readNumberU<true>(rows, it, ie, fu, fw); if (err) break;  // Number of vertices
-    err = readNumberU<true>(cols, it, ie, fu, fw); if (err) break;  // Number of vertices
-    err = readNumberU<true>(size, it, ie, fu, fw);                  // Number of edges
-  } while (false);
-  if (err) return err;  // Error: Invalid MTX format header
+  it = readNumberW<true>(rows, it, ie, fu, fw);  // Number of vertices
+  it = readNumberW<true>(cols, it, ie, fu, fw);  // Number of vertices
+  it = readNumberW<true>(size, it, ie, fu, fw);  // Number of edges
   // Jump to the next line.
   it = findNextLine(it, ie);
-  data.remove_prefix(it-ib);
-  return I();
+  return it-ib;
 }
 #pragma endregion
 
@@ -113,36 +103,104 @@ inline auto readMtxFormatHeaderU(bool& symmetric, size_t& rows, size_t& cols, si
 
 #pragma region READ EDGELIST FORMAT
 /**
+ * Read an EdgeList format file (check for errors, handle comments).
+ * @param data input file data (updated)
+ * @param symmetric is graph symmetric
+ * @param weighted is graph weighted
+ * @param fb on body line (u, v, w)
+ */
+template <class FB>
+inline void readEdgelistFormatDoChecked(string_view data, bool symmetric, bool weighted, FB fb) {
+  auto fu = [](char c) { return c==','; };                      // Support CSV
+  auto fw = [](char c) { return c==',' || c=='%' || c=='#'; };  // Support CSV, comments
+  auto ib = data.begin(), ie = data.end(), it = ib;
+  for (; it!=ie; it = findNextLine(it, ie)) {
+    // Skip past empty lines and comments.
+    it = findNextNonBlank(it, ie, fu);
+    if (it==ie || *it=='%' || *it=='#' || isNewline(*it)) continue;
+    // Read u, v, w (if weighted).
+    int64_t u = 0, v = 0; double w = 1; auto il = it;
+    it = readNumberW<true>(u, it, ie, fu, fw);  // Source vertex
+    it = readNumberW<true>(v, it, ie, fu, fw);  // Target vertex
+    if (weighted) {
+      it = readNumberW<true>(w, it, ie, fu, fw);  // Edge weight
+    }
+    if (u<0 || v<0) throw FormatError("Invalid Edgelist body (negative vertex-id)", il);
+    fb(u, v, w);
+    if (symmetric && u!=v) fb(v, u, w);
+  }
+}
+
+
+/**
+ * Read an EdgeList format file (crazy frog version).
+ * @param data input file data (updated)
+ * @param symmetric is graph symmetric
+ * @param weighted is graph weighted
+ * @param fb on body line (u, v, w)
+ */
+template <class FB>
+inline void readEdgelistFormatDoUnchecked(string_view data, bool symmetric, bool weighted, FB fb) {
+  auto ib = data.begin(), ie = data.end(), it = ib;
+  while (true) {
+    // Read u, v, w (if weighted).
+    uint64_t u = 0, v = 0; double w = 1;
+    it = findNextDigit(it, ie);
+    if (it==ie) break;  // No more lines
+    it = parseWholeNumberSimdW(u, it, ie);  // Source vertex
+    it = findNextDigit(it, ie);
+    it = parseWholeNumberSimdW(v, it, ie);  // Target vertex
+    if (weighted) {
+      it = findNextDigit(it, ie);
+      it = parseFloatSimdW(w, it, ie);  // Edge weight
+    }
+    fb(u, v, w);
+    if (symmetric && u!=v) fb(v, u, w);
+  }
+}
+
+
+/**
  * Read an EdgeList format file.
  * @tparam CHECK check for error?
  * @param data input file data (updated)
  * @param symmetric is graph symmetric
  * @param weighted is graph weighted
  * @param fb on body line (u, v, w)
- * @returns iterator to error in data
  */
 template <bool CHECK=false, class FB>
-inline auto readEdgelistFormatDoU(string_view& data, bool symmetric, bool weighted, FB fb) {
-  using I = decltype(data.begin());
-  auto fu = [](char c) { return c==','; };                      // Support CSV
-  auto fw = [](char c) { return c==',' || c=='%' || c=='#'; };  // Support CSV, comments
-  auto ib = data.begin(), ie = data.end(), it = ib;
-  I err = I();
-  for (; it!=ie; it = findNextLine(it, ie)) {
-    // Skip past empty lines and comments.
-    it = findNextNonBlank(it, ie, fu);
-    if (*it=='%' || *it=='#' || isNewline(*it)) continue;
-    // Read u, v, w (if weighted).
-    size_t u = 0, v = 0; double w = 1;
-    err = readNumberU<CHECK>(u, it, ie, fu, fw); if (CHECK && err) break;  // Source vertex
-    err = readNumberU<CHECK>(v, it, ie, fu, fw); if (CHECK && err) break;  // Target vertex
-    if (weighted) { err = readNumberU<CHECK>(w, it, ie, fu, fw); if (CHECK && err) break; }  // Edge weight
-    fb(u, v, w);
-    if (symmetric) fb(v, u, w);
-  }
-  if (err) return err;  // Error: Invalid EdgeList format body
-  data.remove_prefix(it-ib);
-  return I();
+inline void readEdgelistFormatDo(string_view data, bool symmetric, bool weighted, FB fb) {
+  if constexpr (CHECK) readEdgelistFormatDoChecked(data, symmetric, weighted, fb);
+  else readEdgelistFormatDoUnchecked(data, symmetric, weighted, fb);
+}
+
+
+/**
+ * Read an EdgeList format file, and record the edges and vertex degrees.
+ * @tparam CHECK check for error?
+ * @param us source vertices (output)
+ * @param vs target vertices (output)
+ * @param ws edge weights (output)
+ * @param degs vertex degrees (updated, must be initialized, optional)
+ * @param data input file data
+ * @param symmetric is graph symmetric
+ * @param weighted is graph weighted
+ * @returns number of edges read
+ */
+template <bool CHECK=false, class K, class E>
+inline size_t readEdgelistFormatU(K *us, K *vs, E *ws, K *degs, string_view data, bool symmetric, bool weighted) {
+  size_t i = 0;
+  readEdgelistFormatDo<CHECK>(data, symmetric, weighted, [&](auto u, auto v, auto w) {
+    // Record the edge.
+    us[i] = u;
+    vs[i] = v;
+    if (weighted) ws[i] = w;
+    // Update degree of source vertex.
+    if (degs) ++degs[u];
+    ++i;
+  });
+  // Return number of edges.
+  return i;
 }
 
 
@@ -164,34 +222,65 @@ inline string_view readEdgelistFormatBlock(string_view data, size_t b, size_t B)
 
 
 /**
- * Read an EdgeList format file.
+ * Read an EdgeList format file, and record the edges and vertex degrees.
  * @tparam CHECK check for error?
- * @param data input file data (updated)
+ * @param us per-thread source vertices (output)
+ * @param vs per-thread target vertices (output)
+ * @param ws per-thread edge weights (output)
+ * @param degs per-thread vertex degrees (updated, must be initialized, optional)
+ * @param data input file data
  * @param symmetric is graph symmetric
  * @param weighted is graph weighted
- * @param fb on body line (u, v, w)
- * @returns iterator to error in data
+ * @returns number of edges read
  */
-template <bool CHECK=false, class FB>
-inline void readEdgelistFormatDoOmpU(string_view& data, bool symmetric, bool weighted, FB fb) {
-  using I = decltype(data.begin());
-  const int T = omp_get_max_threads();
+template <bool CHECK=false, class K, class E>
+inline size_t readEdgelistFormatOmpU(K** us, K** vs, E** ws, K** degs, string_view data, bool symmetric, bool weighted) {
   const size_t DATA  = data.size();
-  const size_t BLOCK = 4096;             // Characters per block (1 page)
-  const size_t GRID  = 128 * T * BLOCK;  // Characters per grid (128T pages)
-  I err = I();
-  // Process COO file in grids.
-  for (size_t g=0; g<DATA; g+=GRID) {
-    size_t B = min(g+GRID, DATA);
-    // Process a grid in parallel with dynamic scheduling.
-    #pragma omp parallel for schedule(dynamic, 1) shared(err)
-    for (size_t b=g; b<B; b+=BLOCK) {
-      string_view bdata = readEdgelistFormatBlock(data, b, BLOCK);
-      I berr = readEdgelistFormatDoU<CHECK>(bdata, weighted, symmetric, fb);
-      if (CHECK && berr && !err) err = berr;  // Error: Invalid EdgeList format body
+  const size_t BLOCK = 256 * 1024;  // Characters per block (256KB)
+  const int T = omp_get_max_threads();
+  FormatError err;  // Common error
+  // Allocate space for per-thread index.
+  vector<size_t*> is(T);
+  for (int t=0; t<T; ++t)
+    is[t] = new size_t();
+  // Process a grid in parallel with dynamic scheduling.
+  #pragma omp parallel for schedule(dynamic, 1) shared(err)
+  for (size_t b=0; b<DATA; b+=BLOCK) {
+    int    t = omp_get_thread_num();
+    // Get per-thread index.
+    size_t i = *is[t];
+    // Skip if error occurred.
+    if (CHECK && !err.empty()) continue;
+    // Read a block of data.
+    string_view bdata = readEdgelistFormatBlock(data, b, BLOCK);
+    auto fb = [&](auto u, auto v, auto w) {
+      // Record the edge.
+      us[t][i] = u;
+      vs[t][i] = v;
+      if (weighted) ws[t][i] = w;
+      // Update degree of source vertex.
+      if (degs) ++degs[t][u];
+      ++i;
+    };
+    if constexpr (CHECK) {
+      try { readEdgelistFormatDoChecked(bdata, symmetric, weighted, fb); }
+      catch (const FormatError& e) { if (err.empty()) err = e; }
     }
+    else readEdgelistFormatDoUnchecked(bdata, symmetric, weighted, fb);
+    // Update per-thread index.
+    *is[t] = i;
   }
-  data.remove_prefix(DATA);
+  // Get total number of edges.
+  size_t m = 0;
+  for (int t=0; t<T; ++t)
+    m += *is[t];
+  // Free space for per-thread index.
+  for (int t=0; t<T; ++t)
+    delete is[t];
+  // Throw error if any.
+  if (CHECK && !err.empty()) throw err;
+  // Return number of edges.
+  return m;
 }
 #endif
 #pragma endregion

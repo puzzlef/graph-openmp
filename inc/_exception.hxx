@@ -12,9 +12,9 @@ using std::exception;
 
 #pragma region TYPES
 /**
- * Exception thrown when a string is not in the expected format.
+ * Error thrown when a string is not in the expected format.
  */
-class FormatException : public exception {
+class FormatError : public exception {
   #pragma region DATA
   /** Error message. */
   const char *msg;
@@ -22,19 +22,32 @@ class FormatException : public exception {
   const void *it;
   #pragma endregion
 
-  public:
+
   #pragma region CONSTRUCTORS
+  public:
   /**
-   * Create a format exception.
+   * Create an empty format error.
+   */
+  FormatError() :
+  msg(nullptr), it(nullptr) {}
+
+  /**
+   * Create a format error.
    * @param msg error message
    * @param it iterator to the character where format check fails
    */
   template <class I>
-  FormatException(const char *msg, I it) :
+  FormatError(const char *msg, I it) :
   msg(msg), it(&*it) {}
   #pragma endregion
 
+
   #pragma region METHODS
+  public:
+  inline bool empty() const noexcept {
+    return msg == nullptr;
+  }
+
   /**
    * Get error message.
    * @returns error message

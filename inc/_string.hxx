@@ -129,7 +129,7 @@ inline I findNextNonDigit(I ib, I ie) {
  */
 template <class I, class FU, class FW>
 inline pair<I, I> findNextToken(I ib, I ie, FU fu, FW fw) {
-  auto tb = findNextNonWhitespace(ib, ie, fu);  // findNextNonBlank
+  auto tb = findNextNonBlank(ib, ie, fu);
   auto te = findNextWhitespace(tb+1, ie, fw);
   return {tb, te};
 }
@@ -344,26 +344,6 @@ inline I parseNumberSimdW(T& a, I ib, I ie) {
 
 #pragma region READ TOKEN
 /**
- * Obtain the next number from a string.
- * @tparam CHECK check for error?
- * @param a obtained number (output)
- * @param ib begin iterator (updated)
- * @param ie end iterator
- * @param fu is special blank, e.g. comma? (c)
- * @param fw is special whitespace, e.g. comma? (c)
- * @returns iterator to end of number, or error
- */
-template <bool CHECK=false, class T, class I, class FU, class FW>
-inline I scanNumberThrowerW(T& a, I ib, I ie, FU fu, FW fw) {
-  auto [tb, te] = findNextToken(ib, ie, fu, fw);
-  // if constexpr (CHECK) { if (tb==te) { printf("Cant scan empty number, %c\n", *tb); return te; } }
-  tb = parseNumberSimdW<CHECK? 2:1>(a, tb, te);
-  if constexpr (CHECK) { if (tb!=te) { printf("Number to scan is in bad format, %c\n", *tb); return te; } }
-  return te;
-}
-
-
-/**
  * Obtain the next token from a string.
  * @tparam CHECK check for error?
  * @param a obtained token (output)
@@ -371,15 +351,14 @@ inline I scanNumberThrowerW(T& a, I ib, I ie, FU fu, FW fw) {
  * @param ie end iterator
  * @param fu is special blank, e.g. comma? (c)
  * @param fw is special whitespace, e.g. comma? (c)
- * @returns iterator to error
+ * @returns iterator to end of token
  */
 template <bool CHECK=false, class I, class FU, class FW>
-inline I readTokenU(string_view& a, I& ib, I ie, FU fu, FW fw) {
+inline I readTokenW(string_view& a, I ib, I ie, FU fu, FW fw) {
   auto [tb, te] = findNextToken(ib, ie, fu, fw);
-  if constexpr (CHECK) { if (tb==te) return tb; }
+  if constexpr (CHECK) { if (tb==te) throw FormatError("Failed to read token (empty)", tb); }
   a  = string_view(&*tb, te-tb);
-  ib = te;  // Update begin iterator
-  return I();
+  return te;
 }
 
 
@@ -391,16 +370,15 @@ inline I readTokenU(string_view& a, I& ib, I ie, FU fu, FW fw) {
  * @param ie end iterator
  * @param fu is special blank, e.g. comma? (c)
  * @param fw is special whitespace, e.g. comma? (c)
- * @returns iterator to error
+ * @returns iterator to end of number
  */
 template <bool CHECK=false, class T, class I, class FU, class FW>
-inline I readNumberU(T& a, I& ib, I ie, FU fu, FW fw) {
+inline I readNumberW(T& a, I ib, I ie, FU fu, FW fw) {
   auto [tb, te] = findNextToken(ib, ie, fu, fw);
-  if constexpr (CHECK) { if (tb==te) return tb; }
+  if constexpr (CHECK) { if (tb==te) throw FormatError("Failed to read number (empty)", tb); }
   tb = parseNumberSimdW<CHECK? 2:1>(a, tb, te);
-  if constexpr (CHECK) { if (tb!=te) return tb; }
-  ib = te;  // Update begin iterator
-  return I();
+  if constexpr (CHECK) { if (tb!=te) throw FormatError("Failed to read number (bad format)", tb); }
+  return te;
 }
 #pragma endregion
 #pragma endregion
