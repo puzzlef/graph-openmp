@@ -124,10 +124,12 @@ int main(int argc, char **argv) {
   vector<uint32_t*> us(T);
   vector<uint32_t*> vs(T);
   vector<float*>    ws(T);
+  vector<uint32_t*> degs(T);
   for (size_t t=0; t<T; ++t) {
     us[t] = (uint32_t*) allocateMemoryMmap(sizeof(uint32_t) * size / 4);
     vs[t] = (uint32_t*) allocateMemoryMmap(sizeof(uint32_t) * size / 4);
     ws[t] = (float*)    allocateMemoryMmap(sizeof(float)    * size / 4);
+    degs[t] = (uint32_t*) allocateMemoryMmap(sizeof(uint32_t) * size / 4);
   }
   printf("Reading edgelist in file %s ...\n", file);
   string_view data((const char*) addr, size);
@@ -136,8 +138,8 @@ int main(int argc, char **argv) {
   size_t head = readMtxFormatHeaderW(symmetric, rows, cols, edges, data);
   data.remove_prefix(head);
   double tr = measureDuration([&]() {
-    if (PAR) m = readEdgelistFormatOmpU(us.data(), vs.data(), ws.data(), (uint32_t**) nullptr, data, symmetric, weighted);
-    else     m = readEdgelistFormatU(us[0], vs[0], ws[0], (uint32_t*) nullptr, data, symmetric, weighted);
+    if (PAR) m = readEdgelistFormatOmpU(us.data(), vs.data(), ws.data(), degs.data(), data, symmetric, weighted);
+    else     m = readEdgelistFormatU(us[0], vs[0], ws[0], degs[0], data, symmetric, weighted);
   });
   printf("{%09.1fms, m=%zu, size=%zu} %s\n", tr, m, edges, PAR? "readEdgesOmp" : "readEdges");
   // Free memory.
@@ -145,6 +147,7 @@ int main(int argc, char **argv) {
     freeMemoryMmap(us[t], sizeof(uint32_t) * size / 4);
     freeMemoryMmap(vs[t], sizeof(uint32_t) * size / 4);
     freeMemoryMmap(ws[t], sizeof(float)    * size / 4);
+    freeMemoryMmap(degs[t], sizeof(uint32_t) * size / 4);
   }
   unmapFileFromMemory(fd, addr, size);
   printf("\n");
