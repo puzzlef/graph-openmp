@@ -435,7 +435,7 @@ inline void csrAddEdgeOmpU(vector<K>& degrees, vector<K>& edgeKeys, vector<E>& e
 template <class O, class K, class E>
 inline void csrCreateFromEdgelistW(O *offsets, K *edgeKeys, E *edgeValues, K *degrees, const K *sources, const K *targets, const E *weights, size_t N, size_t M) {
   // Compute offsets.
-  copyValuesW(offsets, degrees, N+1);
+  copyValuesW(offsets, degrees+1, N+1);
   exclusiveScanW(offsets, offsets, N+1);
   // Populate edge keys and values.
   for (size_t i=0; i<M; ++i) {
@@ -446,7 +446,7 @@ inline void csrCreateFromEdgelistW(O *offsets, K *edgeKeys, E *edgeValues, K *de
     if (weights) edgeValues[j] = weights[i];
   }
   // Recover offsets.
-  copyValuesW(offsets, degrees, N+1);
+  copyValuesW(offsets, degrees+1, N+1);
   exclusiveScanW(offsets, offsets, N+1);
 }
 
@@ -468,22 +468,27 @@ template <class O, class K, class E>
 inline void csrCreateFromEdgelistOmpU(O *offsets, K *edgeKeys, E *edgeValues, K **degrees, const K **sources, const K **targets, const E **weights, const size_t *counts, size_t N) {
   const int T = omp_get_max_threads();
   vector<O> buf(T);  // Buffer for exclusive scan
+  // printf("csrCreateFromEdgelistOmpU: T=%d\n", T);
   // Compute the total degree of each vertex.
   #pragma omp parallel for schedule(dynamic, 2048)
   for (K u=0; u<N; ++u) {
-    for (int l=0; l<T; ++l)
-      offsets[u] += degrees[l][u];
+    offsets[u] = 0;
+    for (int l=1; l<T; ++l)
+      offsets[u] += degrees[l][u+1];
   }
+  // printf("csrCreateFromEdgelistOmpU: total degree computed\n");
   // Compute offsets.
   exclusiveScanOmpW(offsets, buf.data(), offsets, N+1);
+  printf("csrCreateFromEdgelistOmpU: offsets computed\n");
   // Populate edge keys and values.
   #pragma omp parallel
   {
     int t = omp_get_thread_num();
     for (int l=0; l<T; ++l) {
+      // printf("csrCreateFromEdgelistOmpU: thread %d, l=%d, counts[l]=%zu\n", t, l, counts[l]);
       for (size_t i=0; i<counts[l]; ++i) {
-        K u = sources[l][i];
-        K v = targets[l][i];
+        K u = sources[l][i] - 1;
+        K v = targets[l][i] - 1;
         if (!belongsOmp(u, t, T)) continue;
         size_t j = offsets[u]++;
         edgeKeys[j] = v;
@@ -491,8 +496,15 @@ inline void csrCreateFromEdgelistOmpU(O *offsets, K *edgeKeys, E *edgeValues, K 
       }
     }
   }
+  printf("csrCreateFromEdgelistOmpU: edge keys and values populated\n");
   // Recover offsets.
-  copyValuesOmpW(offsets, degrees[0], N+1);
+  #pragma omp parallel for schedule(dynamic, 2048)
+  for (K u=0; u<N; ++u) {
+    offsets[u] = 0;
+    for (int l=0; l<T; ++l)
+      offsets[u] += degrees[l][u+1];
+  }
+  // Compute offsets.
   exclusiveScanOmpW(offsets, buf.data(), offsets, N+1);
 }
 #pragma endregion
