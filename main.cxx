@@ -126,7 +126,8 @@ int main(int argc, char **argv) {
   vector<uint32_t*> targets(T);
   vector<float*>    weights(T);
   vector<uint32_t*> degrees(T);
-  vector<unique_ptr<size_t>> scounts;
+  // vector<unique_ptr<size_t>> scounts;
+  vector<size_t> scounts;
   for (size_t t=0; t<T; ++t) {
     sources[t] = (uint32_t*) mmapAlloc(sizeof(uint32_t) * size / 4);
     targets[t] = (uint32_t*) mmapAlloc(sizeof(uint32_t) * size / 4);
@@ -153,7 +154,7 @@ int main(int argc, char **argv) {
   });
   vector<size_t> counts(T);
   for (size_t t=0; t<T; ++t)
-    counts[t] = *scounts[t];
+    counts[t] = scounts[t];
   size_t mm = 0;
   for (size_t t=0; t<T; ++t)
     mm += counts[t];

@@ -72,7 +72,7 @@ inline size_t readCooFormatHeaderW(size_t& rows, size_t& cols, size_t& size, str
  * @param data input file data
  * @returns size of header
  */
-inline auto readMtxFormatHeaderW(bool& symmetric, size_t& rows, size_t& cols, size_t& size, string_view data) {
+inline size_t readMtxFormatHeaderW(bool& symmetric, size_t& rows, size_t& cols, size_t& size, string_view data) {
   auto fu = [](char c) { return false; };
   auto fw = [](char c) { return false; };
   auto ib = data.begin(), ie = data.end(), it = ib;
@@ -111,7 +111,7 @@ inline auto readMtxFormatHeaderW(bool& symmetric, size_t& rows, size_t& cols, si
  * @param weighted is graph weighted
  * @param fb on body line (u, v, w)
  */
-template <class FB>
+template <int BASE=1, class FB>
 inline void readEdgelistFormatDoChecked(string_view data, bool symmetric, bool weighted, FB fb) {
   auto fu = [](char c) { return c==','; };                      // Support CSV
   auto fw = [](char c) { return c==',' || c=='%' || c=='#'; };  // Support CSV, comments
@@ -127,6 +127,7 @@ inline void readEdgelistFormatDoChecked(string_view data, bool symmetric, bool w
     if (weighted) {
       it = readNumberW<true>(w, it, ie, fu, fw);  // Edge weight
     }
+    if constexpr (BASE) { --u; --v; }
     if (u<0 || v<0) throw FormatError("Invalid Edgelist body (negative vertex-id)", il);
     fb(u, v, w);
     if (symmetric && u!=v) fb(v, u, w);
@@ -141,7 +142,7 @@ inline void readEdgelistFormatDoChecked(string_view data, bool symmetric, bool w
  * @param weighted is graph weighted
  * @param fb on body line (u, v, w)
  */
-template <class FB>
+template <int BASE=1, class FB>
 inline void readEdgelistFormatDoUnchecked(string_view data, bool symmetric, bool weighted, FB fb) {
   auto ib = data.begin(), ie = data.end(), it = ib;
   while (true) {
@@ -156,6 +157,7 @@ inline void readEdgelistFormatDoUnchecked(string_view data, bool symmetric, bool
       it = findNextDigit(it, ie);
       it = parseFloatSimdW(w, it, ie);  // Edge weight
     }
+    if constexpr (BASE) { --u; --v; }
     fb(u, v, w);
     if (symmetric && u!=v) fb(v, u, w);
   }
@@ -189,8 +191,8 @@ inline void readEdgelistFormatDo(string_view data, bool symmetric, bool weighted
  * @param weighted is graph weighted
  * @returns number of edges read
  */
-template <bool CHECK=false, class K, class E>
-inline size_t readEdgelistFormatU(K *sources, K *targets, E *weights, K *degrees, string_view data, bool symmetric, bool weighted) {
+template <bool CHECK=false, class IK, class IE>
+inline size_t readEdgelistFormatU(IK sources, IK targets, IE weights, IK degrees, string_view data, bool symmetric, bool weighted) {
   size_t i = 0;
   readEdgelistFormatDo<CHECK>(data, symmetric, weighted, [&](auto u, auto v, auto w) {
     // Record the edge.
@@ -233,10 +235,10 @@ inline string_view readEdgelistFormatBlock(string_view data, size_t b, size_t B)
  * @param data input file data
  * @param symmetric is graph symmetric
  * @param weighted is graph weighted
- * @returns total number of edges read
+ * @returns per-thread number of edges read
  */
-template <bool CHECK=false, class K, class E>
-inline vector<unique_ptr<size_t>> readEdgelistFormatOmpU(K **sources, K **targets, E **weights, K **degrees, string_view data, bool symmetric, bool weighted) {
+template <bool CHECK=false, class IIK, class IIE>
+inline vector<size_t> readEdgelistFormatOmpU(IIK sources, IIK targets, IIE weights, IIK degrees, string_view data, bool symmetric, bool weighted) {
   const size_t DATA  = data.size();
   const size_t BLOCK = 256 * 1024;  // Characters per block (256KB)
   const int T = omp_get_max_threads();
@@ -272,17 +274,13 @@ inline vector<unique_ptr<size_t>> readEdgelistFormatOmpU(K **sources, K **target
     // Update per-thread index.
     *is[t] = i;
   }
-  // Update counts, and get total number of edges.
-  // size_t m = 0;
-  // for (int t=0; t<T; ++t) {
-  //   size_t i = *is[t];
-  //   if (counts) counts[t] = i;
-  //   m += i;
-  // }
   // Throw error if any.
   if (CHECK && !err.empty()) throw err;
-  // Return number of edges.
-  return is;
+  // Return per-thread counts.
+  vector<size_t> counts(T);
+  for (int t=0; t<T; ++t)
+    counts[t] = *is[t];
+  return counts;
 }
 #endif
 #pragma endregion

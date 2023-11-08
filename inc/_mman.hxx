@@ -67,8 +67,7 @@ struct MappedFile {
   /**
    * Get mapped data (implicit conversion).
    */
-  template <class T>
-  inline operator T*() const { return _data; }
+  inline operator void*() const { return _data; }
 
   /**
    * Get mapped data.
@@ -102,6 +101,7 @@ struct MappedFile {
 
 
   #pragma region CONSTRUCTORS / DESTRUCTORS
+  public:
   /**
    * Map file to memory.
    * @param pth file path
@@ -189,6 +189,7 @@ struct MappedPtr {
 
 
   #pragma region CONSTRUCTORS / DESTRUCTORS
+  public:
   /**
    * Create an empty allocation.
    */
