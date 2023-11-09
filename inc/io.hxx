@@ -274,6 +274,17 @@ inline vector<size_t> readEdgelistFormatOmpU(IIK sources, IIK targets, IIE weigh
     // Update per-thread index.
     *is[t] = i;
   }
+  #pragma omp parallel
+  {
+    int t = omp_get_thread_num();
+    if (degrees && t>0) {
+      for (size_t u=0; u<7414866; ++u) {
+        if (degrees[t][u] == 0) continue;
+        #pragma omp atomic update
+        degrees[0][u] += degrees[t][u];
+      }
+    }
+  }
   // Throw error if any.
   if (CHECK && !err.empty()) throw err;
   // Return per-thread counts.
