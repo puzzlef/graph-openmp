@@ -263,7 +263,10 @@ inline vector<size_t> readEdgelistFormatOmpU(IIK sources, IIK targets, IIE weigh
       targets[t][i] = v;
       if (weighted) weights[t][i] = w;
       // Update degree of source vertex.
-      if (degrees) ++degrees[t][u];
+      if (degrees) {
+        #pragma omp atomic update
+        ++degrees[t % 4][u];
+      }
       ++i;
     };
     if constexpr (CHECK) {
@@ -273,6 +276,14 @@ inline vector<size_t> readEdgelistFormatOmpU(IIK sources, IIK targets, IIE weigh
     else readEdgelistFormatDoUnchecked(bdata, symmetric, weighted, fb);
     // Update per-thread index.
     *is[t] = i;
+  }
+  auto& degrees0 = degrees[0];
+  auto& degrees1 = degrees[1];
+  auto& degrees2 = degrees[2];
+  auto& degrees3 = degrees[3];
+  #pragma omp parallel for schedule(static, 2048)
+  for (size_t u=0; u<7414866; ++u) {
+    degrees0[u] += degrees1[u] + degrees2[u] + degrees3[u];
   }
   // Throw error if any.
   if (CHECK && !err.empty()) throw err;
