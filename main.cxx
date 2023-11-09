@@ -161,8 +161,10 @@ int main(int argc, char **argv) {
   printf("edges=%zu, mm=%zu\n", edges, mm);
   assert(mm==edges);
   printf("{%09.1fms, m=%zu, size=%zu} %s\n", tr, m, edges, PAR? "readEdgesOmp" : "readEdges");
+  combineDegreesOmpU(degrees.data(), rows);
+  convertEdgelistToCsrOmpW(offsets.data(), degrees[0], edgeKeys.data(), edgeValues.data(), sources.data(), targets.data(), (float**) nullptr, counts.data(), rows);
   // csrCreateFromEdgelistW((size_t*) offsets.data(), (uint32_t*) edgeKeys.data(), (float*) edgeValues.data(), degrees[0], sources[0], targets[0], weights[0], rows, m);
-  csrCreateFromEdgelistOmpU((size_t*) offsets.data(), (uint32_t*) edgeKeys.data(), (float*) edgeValues.data(), (uint32_t**) degrees.data(), (const uint32_t**) sources.data(), (const uint32_t**) targets.data(), (const float**) weights.data(), (const size_t*) counts.data(), rows);
+  // csrCreateFromEdgelistOmpU((size_t*) offsets.data(), (uint32_t*) edgeKeys.data(), (float*) edgeValues.data(), (uint32_t**) degrees.data(), (const uint32_t**) sources.data(), (const uint32_t**) targets.data(), (const float**) weights.data(), (const size_t*) counts.data(), rows);
   printf("Created CSR graph with %zu nodes and %zu edges.\n", rows, m);
   // Free memory.
   for (size_t t=0; t<T; ++t) {

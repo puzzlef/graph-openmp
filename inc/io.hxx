@@ -1,4 +1,5 @@
 #pragma once
+#include <type_traits>
 #include <memory>
 #include <tuple>
 #include <string>
@@ -15,6 +16,7 @@
 #include <omp.h>
 #endif
 
+using std::remove_reference;
 using std::unique_ptr;
 using std::tuple;
 using std::string;
@@ -283,6 +285,44 @@ inline auto readEdgelistFormatOmpU(IIK sources, IIK targets, IIE weights, IIK de
   return counts;
 }
 #endif
+#pragma endregion
+
+
+
+
+#pragma region UTILITIES
+template <class IIK>
+inline void combineDegreesOmpU(IIK degrees, size_t N) {
+  int T = omp_get_max_threads();
+  #pragma omp parallel for schedule(static, 2048)
+  for (size_t u=0; u<N; ++u) {
+    for (int t=1; t<T; ++t)
+      degrees[0][u] += degrees[t][u];
+  }
+}
+
+
+template <class IO, class IK, class IE, class IIK, class IIE>
+inline void convertEdgelistToCsrOmpW(IO offsets, IK degrees, IK edgeKeys, IE edgeValues, IIK sources, IIK targets, IIE weights, IO counts, size_t N) {
+  using O = typename remove_reference<decltype(offsets[0])>::type;
+  using K = typename remove_reference<decltype(degrees[0])>::type;
+  int T = omp_get_max_threads();
+  vector<O> buf(T);
+  exclusiveScanOmpW(&offsets[0], buf.data(), &degrees[0], N);
+  fillValueOmpU(&degrees[0], N, K());
+  #pragma omp parallel
+  {
+    for (int t=0; t<T; ++t) {
+      for (size_t m=0; m<counts[t]; ++m) {
+        auto u = sources[t][m];
+        auto v = targets[t][m];
+        auto i = degrees[u]++;
+        edgeKeys[offsets[u]+i] = v;
+        if (weights) edgeValues[offsets[u]+i] = weights[t][m];;
+      }
+    }
+  }
+}
 #pragma endregion
 
 
