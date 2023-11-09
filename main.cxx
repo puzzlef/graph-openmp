@@ -150,6 +150,7 @@ int main(int argc, char **argv) {
   double tr = measureDuration([&]() {
     if (PAR) scounts = readEdgelistFormatOmpU(sources.data(), targets.data(), weights.data(), degrees.data(), data, symmetric, weighted, rows);
     else     m = readEdgelistFormatU(sources[0], targets[0], weights[0], degrees[0], data, symmetric, weighted);
+    if (PAR) combineDegreesOmpU(degrees.data(), rows);
     // csrCreateFromEdgelistOmpU((size_t*) offsets.data(), (uint32_t*) edgeKeys.data(), (float*) edgeValues.data(), (uint32_t**) degrees.data(), (const uint32_t**) sources.data(), (const uint32_t**) targets.data(), (const float**) weights.data(), (const size_t*) counts.data(), rows);
   });
   vector<size_t> counts(T);

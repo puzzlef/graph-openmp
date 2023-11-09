@@ -274,7 +274,23 @@ inline vector<size_t> readEdgelistFormatOmpU(IIK sources, IIK targets, IIE weigh
     // Update per-thread index.
     *is[t] = i;
   }
-  // printf("rows=%zu\n", rows);
+  // Avoid AVX-SSE transition penalty.
+  asm("vzeroupper");
+  // Throw error if any.
+  if (CHECK && !err.empty()) throw err;
+  // Return per-thread counts.
+  vector<size_t> counts(T);
+  for (int t=0; t<T; ++t)
+    counts[t] = *is[t];
+  return counts;
+}
+#endif
+#pragma endregion
+
+
+
+template <class IIK>
+inline void combineDegreesOmpU(IIK degrees, size_t rows) {
   asm("vzeroupper");
   #pragma omp parallel
   {
@@ -289,16 +305,7 @@ inline vector<size_t> readEdgelistFormatOmpU(IIK sources, IIK targets, IIE weigh
       }
     }
   }
-  // Throw error if any.
-  if (CHECK && !err.empty()) throw err;
-  // Return per-thread counts.
-  vector<size_t> counts(T);
-  for (int t=0; t<T; ++t)
-    counts[t] = *is[t];
-  return counts;
 }
-#endif
-#pragma endregion
 
 
 
