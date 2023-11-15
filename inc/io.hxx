@@ -295,6 +295,32 @@ inline auto readEdgelistFormatOmpU(IIK sources, IIK targets, IIE weights, IIK de
 
 
 
+template <int PARTS=4, class IIO, class IID, class IIK, class IIE, class IIW>
+inline void convertToCsrOmpU(IIO offsets, IID degrees, IIK edgeKeys, IIE edgeValues, IIK sources, IIK targets, IIW weights, const vector<size_t>& counts, size_t rows) {
+  int T = omp_get_max_threads();
+  vector<size_t> buf(T);
+  // printf("convertToCsrOmpU: rows=%zu\n", rows);
+  for (int t=0; t<PARTS; ++t)
+    exclusiveScanOmpW(&offsets[t][0], &buf[0], &degrees[t][0], rows);
+  // printf("convertToCsrOmpU: rows=%zu\n", rows);
+  #pragma omp parallel
+  {
+    int t = omp_get_thread_num();
+    for (size_t m=0; m<counts[t]; ++m) {
+      uint32_t u = sources[t][m];
+      uint32_t v = targets[t][m];
+      size_t   i = 0;
+      #pragma omp atomic capture
+      i = offsets[t % PARTS][u]++;
+      edgeKeys[t % PARTS][i] = v;
+      if (weights) edgeValues[t % PARTS][i] = weights[t][m];
+    }
+  }
+}
+
+
+
+
 #pragma region READ COO FORMAT AND PERFORM
 /**
  * Read a COO format file.
