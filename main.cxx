@@ -149,7 +149,7 @@ int main(int argc, char **argv) {
   printf("rows=%zu, cols=%zu, edges=%zu\n", rows, cols, edges);
   double tr = measureDuration([&]() {
     counts = readEdgelistFormatOmpU(degrees.data(), sources.data(), targets.data(), weights.data(), data, symmetric, weighted);
-    convertToCsrOmpU(offsets.data(), degrees.data(), edgeKeys.data(), edgeValues.data(), sources.data(), targets.data(), (float**) nullptr, counts, rows);
+    convertToCsrOmpU(offsets[4], edgeKeys[4], edgeValues[4], degrees[4], offsets.data(), edgeKeys.data(), edgeValues.data(), degrees.data(), sources.data(), targets.data(), (float**) nullptr, counts, rows);
   });
   asm("vzeroupper");  // Avoid AVX-SSE transition penalty
   size_t mm = 0;
