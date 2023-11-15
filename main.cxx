@@ -148,7 +148,7 @@ int main(int argc, char **argv) {
   }
   printf("rows=%zu, cols=%zu, edges=%zu\n", rows, cols, edges);
   double tr = measureDuration([&]() {
-    counts = readEdgelistFormatOmpU(sources.data(), targets.data(), weights.data(), degrees.data(), data, symmetric, weighted);
+    counts = readEdgelistFormatOmpU(degrees.data(), sources.data(), targets.data(), weights.data(), data, symmetric, weighted);
     convertToCsrOmpU(offsets.data(), degrees.data(), edgeKeys.data(), edgeValues.data(), sources.data(), targets.data(), (float**) nullptr, counts, rows);
   });
   asm("vzeroupper");  // Avoid AVX-SSE transition penalty

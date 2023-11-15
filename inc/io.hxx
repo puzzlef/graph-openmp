@@ -182,17 +182,17 @@ inline void readEdgelistFormatDo(string_view data, bool symmetric, bool weighted
 /**
  * Read an EdgeList format file, and record the edges and vertex degrees.
  * @tparam CHECK check for error?
+ * @param degrees vertex degrees (updated, must be initialized, optional)
  * @param sources source vertices (output)
  * @param targets target vertices (output)
  * @param weights edge weights (output)
- * @param degrees vertex degrees (updated, must be initialized, optional)
  * @param data input file data
  * @param symmetric is graph symmetric
  * @param weighted is graph weighted
  * @returns number of edges read
  */
 template <bool CHECK=false, class IK, class IE>
-inline size_t readEdgelistFormatU(IK sources, IK targets, IE weights, IK degrees, string_view data, bool symmetric, bool weighted) {
+inline size_t readEdgelistFormatU(IK degrees, IK sources, IK targets, IE weights, string_view data, bool symmetric, bool weighted) {
   size_t i = 0;
   readEdgelistFormatDo<CHECK>(data, symmetric, weighted, [&](auto u, auto v, auto w) {
     // Record the edge.
@@ -229,17 +229,17 @@ inline string_view readEdgelistFormatBlock(string_view data, size_t b, size_t B)
  * Read an EdgeList format file, and record the edges and vertex degrees.
  * @tparam CHECK check for error?
  * @tparam PARTS number of partitions for vertex degrees
+ * @param pdegrees per-partition vertex degrees (updated, must be initialized, optional)
  * @param sources per-thread source vertices (output)
  * @param targets per-thread target vertices (output)
  * @param weights per-thread edge weights (output)
- * @param degrees per-thread vertex degrees (updated, must be initialized, optional)
  * @param data input file data
  * @param symmetric is graph symmetric
  * @param weighted is graph weighted
  * @returns per-thread number of edges read
  */
 template <bool CHECK=false, int PARTS=4, class IIK, class IIE>
-inline auto readEdgelistFormatOmpU(IIK sources, IIK targets, IIE weights, IIK degrees, string_view data, bool symmetric, bool weighted) {
+inline auto readEdgelistFormatOmpU(IIK pdegrees, IIK sources, IIK targets, IIE weights, string_view data, bool symmetric, bool weighted) {
   const size_t DATA  = data.size();
   const size_t BLOCK = 256 * 1024;  // Characters per block (256KB)
   const int T = omp_get_max_threads();
@@ -264,11 +264,11 @@ inline auto readEdgelistFormatOmpU(IIK sources, IIK targets, IIE weights, IIK de
       targets[t][i] = v;
       if (weighted) weights[t][i] = w;
       // Update degree of source vertex.
-      if (degrees) {
-        if (PARTS==0) ++degrees[t][u];
+      if (pdegrees) {
+        if (PARTS==0) ++pdegrees[t][u];
         else {
           #pragma omp atomic
-          ++degrees[t % PARTS][u];
+          ++pdegrees[t % PARTS][u];
         }
       }
       ++i;
