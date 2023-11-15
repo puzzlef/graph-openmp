@@ -51,7 +51,10 @@ stdbuf --output=L ./a.out ~/Data/kmer_V1r.mtx        2>&1 | tee -a "$out"
 }
 
 perform-all
-# perform-all
-# perform-all
-# perform-all
-# perform-all
+perform-all
+perform-all
+perform-all
+perform-all
+
+# Signal completion
+curl -X POST "https://maker.ifttt.com/trigger/puzzlef/with/key/${IFTTT_KEY}?value1=$src$1"
