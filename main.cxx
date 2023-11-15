@@ -116,18 +116,16 @@ int mainOld(int argc, char **argv) {
 
 int main(int argc, char **argv) {
   char *file = argv[1];
-  bool  PAR  = argc>2 ? atoi(argv[2]) : 1;  // 0=serial, 1=parallel
   omp_set_num_threads(MAX_THREADS);
   printf("OMP_NUM_THREADS=%d\n", MAX_THREADS);
   MappedFile mf(file);
   size_t size = mf.size();
-  int T = PAR? MAX_THREADS : 1;
+  int T = MAX_THREADS;
   vector<uint32_t*> sources(T);
   vector<uint32_t*> targets(T);
   vector<float*>    weights(T);
   vector<uint32_t*> degrees(T);
-  // vector<unique_ptr<size_t>> scounts;
-  vector<size_t> scounts;
+  vector<size_t> counts;
   for (size_t t=0; t<T; ++t) {
     sources[t] = (uint32_t*) mmapAlloc(sizeof(uint32_t) * size / 4);
     targets[t] = (uint32_t*) mmapAlloc(sizeof(uint32_t) * size / 4);
@@ -140,30 +138,16 @@ int main(int argc, char **argv) {
   size_t rows, cols, edges, m = 0;
   size_t head = readMtxFormatHeaderW(symmetric, rows, cols, edges, data);
   data.remove_prefix(head);
-  MappedPtr<size_t>   offsets(rows+1);
-  MappedPtr<uint32_t> edgeKeys(edges);
-  MappedPtr<float>    edgeValues(edges);
-  // vector<size_t>   offsets(rows+1);
-  // vector<uint32_t> edgeKeys(edges);
-  // vector<float>    edgeValues(edges);
   printf("rows=%zu, cols=%zu, edges=%zu\n", rows, cols, edges);
   double tr = measureDuration([&]() {
-    if (PAR) scounts = readEdgelistFormatOmpU(sources.data(), targets.data(), weights.data(), (uint32_t**) nullptr, data, symmetric, weighted);
-    else     m = readEdgelistFormatU(sources[0], targets[0], weights[0], degrees[0], data, symmetric, weighted);
-    // csrCreateFromEdgelistOmpU((size_t*) offsets.data(), (uint32_t*) edgeKeys.data(), (float*) edgeValues.data(), (uint32_t**) degrees.data(), (const uint32_t**) sources.data(), (const uint32_t**) targets.data(), (const float**) weights.data(), (const size_t*) counts.data(), rows);
+    counts = readEdgelistFormatOmpU(sources.data(), targets.data(), weights.data(), (uint32_t**) nullptr, data, symmetric, weighted);
   });
-  vector<size_t> counts(T);
-  for (size_t t=0; t<T; ++t)
-    counts[t] = scounts[t];
+  asm("vzeroupper");  // Avoid AVX-SSE transition penalty
   size_t mm = 0;
   for (size_t t=0; t<T; ++t)
     mm += counts[t];
-  printf("edges=%zu, mm=%zu\n", edges, mm);
   assert(mm==edges);
-  printf("{%09.1fms, m=%zu, size=%zu} %s\n", tr, m, edges, PAR? "readEdgesOmp" : "readEdges");
-  // csrCreateFromEdgelistW((size_t*) offsets.data(), (uint32_t*) edgeKeys.data(), (float*) edgeValues.data(), degrees[0], sources[0], targets[0], weights[0], rows, m);
-  csrCreateFromEdgelistOmpU((size_t*) offsets.data(), (uint32_t*) edgeKeys.data(), (float*) edgeValues.data(), (uint32_t**) degrees.data(), (const uint32_t**) sources.data(), (const uint32_t**) targets.data(), (const float**) weights.data(), (const size_t*) counts.data(), rows);
-  printf("Created CSR graph with %zu nodes and %zu edges.\n", rows, m);
+  printf("{%09.1fms, size=%zu} %s\n", tr, edges, "readEdgesOmp");
   // Free memory.
   for (size_t t=0; t<T; ++t) {
     mmapFree(sources[t], sizeof(uint32_t) * size / 4);
