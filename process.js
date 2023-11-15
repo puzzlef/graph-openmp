@@ -2,8 +2,9 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const RGRAPH = /^Loading graph .*\/(.*?)\.mtx \.\.\./m;
-const RRESLT = /^\{(.+?)ms\} order: (.+?) size: (.+?) \[directed\] \{\} (.+)/m;
+const RGRAPH = /^Reading edgelist in file .*\/(.*?)\.mtx \.\.\./m;
+const RORDER = /^rows=(.+?), cols=(.+?), edges=(.+)/m;
+const RRESLT = /^\{(.+?)ms, size=(.+?)\} (.+)/m;
 
 
 
@@ -48,11 +49,14 @@ function readLogLine(ln, data, state) {
     if (!data.has(graph)) data.set(graph, []);
     state = {graph};
   }
+  else if (RORDER.test(ln)) {
+    var [, rows, cols, edges] = RORDER.exec(ln);
+    state.order = rows;
+    state.size  = edges;
+  }
   else if (RRESLT.test(ln)) {
-    var [, total_time, order, size] = RRESLT.exec(ln);
+    var [, total_time, size] = RRESLT.exec(ln);
     data.get(state.graph).push(Object.assign({}, state, {
-      order: parseFloat(order),
-      size:  parseFloat(size),
       total_time: parseFloat(total_time),
     }));
   }
