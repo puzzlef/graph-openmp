@@ -238,7 +238,7 @@ inline string_view readEdgelistFormatBlock(string_view data, size_t b, size_t B)
  * @param weighted is graph weighted
  * @returns per-thread number of edges read
  */
-template <bool CHECK=false, int PARTS=0, class IIK, class IIE>
+template <bool CHECK=false, int PARTS=4, class IIK, class IIE>
 inline auto readEdgelistFormatOmpU(IIK sources, IIK targets, IIE weights, IIK degrees, string_view data, bool symmetric, bool weighted) {
   const size_t DATA  = data.size();
   const size_t BLOCK = 256 * 1024;  // Characters per block (256KB)
