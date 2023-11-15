@@ -138,13 +138,14 @@ int main(int argc, char **argv) {
   size_t rows, cols, edges, m = 0;
   size_t head = readMtxFormatHeaderW(symmetric, rows, cols, edges, data);
   data.remove_prefix(head);
+  symmetric = false;
   vector<size_t*>   offsets(T);
   vector<uint32_t*> edgeKeys(T);
   vector<float*>    edgeValues(T);
   for (int t=0; t<T; ++t) {
-    offsets[t]    = (size_t*)   mmapAlloc(sizeof(size_t)   * (rows+1));
-    edgeKeys[t]   = (uint32_t*) mmapAlloc(sizeof(uint32_t) * edges);
-    edgeValues[t] = (float*)    mmapAlloc(sizeof(float)    * edges);
+    offsets[t]    = (size_t*)   mmapAlloc(sizeof(size_t)   * 2 * (rows+1));
+    edgeKeys[t]   = (uint32_t*) mmapAlloc(sizeof(uint32_t) * 2 * edges);
+    edgeValues[t] = (float*)    mmapAlloc(sizeof(float)    * 2 * edges);
   }
   printf("rows=%zu, cols=%zu, edges=%zu\n", rows, cols, edges);
   double tr = measureDuration([&]() {
@@ -155,6 +156,7 @@ int main(int argc, char **argv) {
   size_t mm = 0;
   for (size_t t=0; t<T; ++t)
     mm += counts[t];
+  // printf("{mm=%zu, edges=%zu}\n", mm, edges);
   assert(mm==edges);
   printf("{%09.1fms, size=%zu} %s\n", tr, edges, "readEdgesOmp");
   // Free memory.
