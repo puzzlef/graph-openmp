@@ -1,4 +1,5 @@
 #pragma once
+#include <type_traits>
 #include <memory>
 #include <tuple>
 #include <string>
@@ -15,6 +16,7 @@
 #include <omp.h>
 #endif
 
+using std::remove_reference;
 using std::unique_ptr;
 using std::tuple;
 using std::string;
@@ -26,6 +28,7 @@ using std::ifstream;
 using std::make_unique;
 using std::min;
 using std::max;
+using std::sort;
 
 
 
@@ -238,7 +241,7 @@ inline string_view readEdgelistFormatBlock(string_view data, size_t b, size_t B)
  * @returns per-thread number of edges read
  */
 template <bool CHECK=false, class IIK, class IIE>
-inline auto readEdgelistFormatOmpU(IIK sources, IIK targets, IIE weights, IIK degrees, string_view data, bool symmetric, bool weighted) {
+inline vector<size_t> readEdgelistFormatOmpU(IIK sources, IIK targets, IIE weights, IIK degrees, string_view data, bool symmetric, bool weighted, size_t rows) {
   const size_t DATA  = data.size();
   const size_t BLOCK = 256 * 1024;  // Characters per block (256KB)
   const int T = omp_get_max_threads();
@@ -274,6 +277,8 @@ inline auto readEdgelistFormatOmpU(IIK sources, IIK targets, IIE weights, IIK de
     // Update per-thread index.
     *is[t] = i;
   }
+  // Avoid AVX-SSE transition penalty.
+  asm("vzeroupper");
   // Throw error if any.
   if (CHECK && !err.empty()) throw err;
   // Return per-thread counts.
@@ -283,6 +288,102 @@ inline auto readEdgelistFormatOmpU(IIK sources, IIK targets, IIE weights, IIK de
   return counts;
 }
 #endif
+#pragma endregion
+
+
+
+
+#pragma region PROCESS EDGELIST
+/**
+ * Combine degrees from per-thread arrays.
+ * @param degrees per-thread degrees (updated)
+ * @param rows number of rows/vetices
+ */
+template <class IIK>
+inline void combineDegreesOmpU(IIK degrees, size_t rows) {
+  asm("vzeroupper");  // Avoid AVX-SSE transition penalty
+  #pragma omp parallel
+  {
+    int t = omp_get_thread_num();
+    auto& degrees0 = degrees[0];
+    auto& degreest = degrees[t];
+    if (degrees && t>0) {
+      for (size_t u=0; u<rows; ++u) {
+        if (degreest[u] == 0) continue;
+        #pragma omp atomic update
+        degrees0[u] += degreest[u];
+      }
+    }
+  }
+}
+
+
+template <class IIO, class IID, class IIK, class IIE, class IIW>
+inline void convertToSubCsrOmpU(IIO offsets, IID degrees, IIK edgeKeys, IIE edgeValues, IIK sources, IIK targets, IIW weights, const vector<size_t>& counts, size_t rows) {
+  using O = typename remove_reference<decltype(offsets[0][0])>::type;
+  using K = typename remove_reference<decltype(degrees[0][0])>::type;
+  int T = omp_get_max_threads();
+  #pragma omp parallel
+  {
+    int t = omp_get_thread_num();
+    exclusiveScanW(&offsets[t][0], &degrees[t][0], rows);
+    for (size_t m=0; m<counts[t]; ++m) {
+      uint32_t u = sources[t][m];
+      uint32_t v = targets[t][m];
+      size_t   i = offsets[t][u]++;
+      edgeKeys[t][i] = v;
+      if (weights) edgeValues[t][i] = weights[t][m];
+    }
+    exclusiveScanW(&offsets[t][0], &degrees[t][0], rows);
+  }
+}
+
+
+template <class IO, class ID, class IK, class IE, class IIK, class IIE>
+inline void convertToCsrOmpU(IO offsets, ID degrees, IK edgeKeys, IE edgeValues, IIK sources, IIK targets, IIE weights, const vector<size_t>& counts, size_t rows) {
+  using O = typename remove_reference<decltype(offsets[0])>::type;
+  using K = typename remove_reference<decltype(degrees[0])>::type;
+  int T = omp_get_max_threads();
+  vector<O> buf(T);
+  exclusiveScanOmpW(&offsets[0], &buf[0], &degrees[0], rows);
+  #pragma omp parallel
+  {
+    int t = omp_get_thread_num();
+    // sort(sources[t], sources[t]+counts[t]);
+    // asm("vzeroupper");
+    for (size_t m=0; m<counts[t]; ++m) {
+      auto u = sources[t][m];
+      auto v = targets[t][m];
+      K i = K();
+      #pragma omp atomic capture
+      i = offsets[u]++;
+      edgeKeys[i] = v;
+      if (weights) edgeValues[i] = weights[t][m];
+    }
+  }
+  // #pragma omp parallel
+  // {
+  //   int t = omp_get_thread_num();
+  //   sort(sources[t], sources[t]+counts[t]);
+  //   for (size_t m=0; m<counts[t];) {
+  //     auto u = sources[t][m];
+  //     auto v = targets[t][m];
+  //     size_t n = m+1;
+  //     for (; n<counts[t] && sources[t][n]==u; ++n);
+  //     auto d = n-m;
+  //     K i = K();
+  //     #pragma omp atomic capture
+  //     { i = offsets[u]; offsets[u] += d; }
+  //     for (; m<n; ++m, ++i) {
+  //       edgeKeys[i] = targets[t][m];
+  //       if (weights) edgeValues[i] = weights[t][m];
+  //     }
+  //     // edgeKeys[i] = v;
+  //     // if (weights) edgeValues[i] = weights[t][m];
+  //   }
+  // }
+  exclusiveScanOmpW(&offsets[0], &buf[0], &degrees[0], rows);
+}
 #pragma endregion
 
 
