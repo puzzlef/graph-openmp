@@ -140,7 +140,7 @@ int main(int argc, char **argv) {
   data.remove_prefix(head);
   printf("rows=%zu, cols=%zu, edges=%zu\n", rows, cols, edges);
   double tr = measureDuration([&]() {
-    counts = readEdgelistFormatOmpU(sources.data(), targets.data(), weights.data(), degrees.data(), data, symmetric, weighted);
+    counts = readEdgelistFormatOmpU<false, 4>(sources.data(), targets.data(), weights.data(), degrees.data(), data, symmetric, weighted);
   });
   asm("vzeroupper");  // Avoid AVX-SSE transition penalty
   size_t mm = 0;

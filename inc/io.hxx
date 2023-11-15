@@ -228,6 +228,7 @@ inline string_view readEdgelistFormatBlock(string_view data, size_t b, size_t B)
 /**
  * Read an EdgeList format file, and record the edges and vertex degrees.
  * @tparam CHECK check for error?
+ * @tparam PARTS number of partitions for vertex degrees
  * @param sources per-thread source vertices (output)
  * @param targets per-thread target vertices (output)
  * @param weights per-thread edge weights (output)
@@ -237,7 +238,7 @@ inline string_view readEdgelistFormatBlock(string_view data, size_t b, size_t B)
  * @param weighted is graph weighted
  * @returns per-thread number of edges read
  */
-template <bool CHECK=false, class IIK, class IIE>
+template <bool CHECK=false, int PARTS=0, class IIK, class IIE>
 inline auto readEdgelistFormatOmpU(IIK sources, IIK targets, IIE weights, IIK degrees, string_view data, bool symmetric, bool weighted) {
   const size_t DATA  = data.size();
   const size_t BLOCK = 256 * 1024;  // Characters per block (256KB)
@@ -263,7 +264,13 @@ inline auto readEdgelistFormatOmpU(IIK sources, IIK targets, IIE weights, IIK de
       targets[t][i] = v;
       if (weighted) weights[t][i] = w;
       // Update degree of source vertex.
-      if (degrees) ++degrees[t][u];
+      if (degrees) {
+        if (PARTS==0) ++degrees[t][u];
+        else {
+          #pragma omp atomic
+          ++degrees[t % PARTS][u];
+        }
+      }
       ++i;
     };
     if constexpr (CHECK) {
