@@ -318,6 +318,27 @@ inline void combineDegreesOmpU(IIK degrees, size_t rows) {
 }
 
 
+template <class IIO, class IID, class IIK, class IIE, class IIW>
+inline void convertToSubCsrOmpU(IIO offsets, IID degrees, IIK edgeKeys, IIE edgeValues, IIK sources, IIK targets, IIW weights, const vector<size_t>& counts, size_t rows) {
+  using O = typename remove_reference<decltype(offsets[0][0])>::type;
+  using K = typename remove_reference<decltype(degrees[0][0])>::type;
+  int T = omp_get_max_threads();
+  #pragma omp parallel
+  {
+    int t = omp_get_thread_num();
+    exclusiveScanW(&offsets[t][0], &degrees[t][0], rows);
+    for (size_t m=0; m<counts[t]; ++m) {
+      uint32_t u = sources[t][m];
+      uint32_t v = targets[t][m];
+      size_t   i = offsets[t][u]++;
+      edgeKeys[t][i] = v;
+      if (weights) edgeValues[t][i] = weights[t][m];
+    }
+    exclusiveScanW(&offsets[t][0], &degrees[t][0], rows);
+  }
+}
+
+
 template <class IO, class ID, class IK, class IE, class IIK, class IIE>
 inline void convertToCsrOmpU(IO offsets, ID degrees, IK edgeKeys, IE edgeValues, IIK sources, IIK targets, IIE weights, const vector<size_t>& counts, size_t rows) {
   using O = typename remove_reference<decltype(offsets[0])>::type;

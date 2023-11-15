@@ -139,18 +139,31 @@ int main(int argc, char **argv) {
   size_t rows, cols, edges;
   size_t head = readMtxFormatHeaderW(symmetric, rows, cols, edges, data);
   data.remove_prefix(head);
-  MappedPtr<size_t>   offsets(rows+1);
-  MappedPtr<uint32_t> edgeKeys(edges);
-  MappedPtr<float>    edgeValues(edges);
+  vector<size_t*>   offsets(T);
+  vector<uint32_t*> edgeKeys(T);
+  vector<float*>    edgeValues(T);
+  for (size_t t=0; t<T; ++t) {
+    offsets[t]   = (size_t*)   mmapAlloc(sizeof(size_t)   * (rows+1));
+    edgeKeys[t]  = (uint32_t*) mmapAlloc(sizeof(uint32_t) * edges);
+    edgeValues[t]= (float*)    mmapAlloc(sizeof(float)    * edges);
+  }
+  // MappedPtr<size_t>   offsets(rows+1);
+  // MappedPtr<uint32_t> edgeKeys(edges);
+  // MappedPtr<float>    edgeValues(edges);
   printf("rows=%zu, cols=%zu, edges=%zu\n", rows, cols, edges);
   double tr = measureDuration([&]() {
     counts = readEdgelistFormatOmpU(sources.data(), targets.data(), weights.data(), degrees.data(), data, symmetric, weighted, rows);
-    combineDegreesOmpU(degrees.data(), rows);
-    convertToCsrOmpU(offsets, degrees[0], edgeKeys, edgeValues, sources, targets, (float**) nullptr, counts, rows);
+    // combineDegreesOmpU(degrees.data(), rows);
+    convertToSubCsrOmpU(offsets, degrees, edgeKeys, edgeValues, sources, targets, (float**) nullptr, counts, rows);
   });
   printf("{%09.1fms, size=%zu} %s\n", tr, edges, PAR? "readEdgesOmp" : "readEdges");
   printf("Created CSR graph with %zu nodes and %zu edges.\n", rows, edges);
   // Free memory.
+  for (size_t t=0; t<T; ++t) {
+    mmapFree(offsets[t],    sizeof(size_t)   * (rows+1));
+    mmapFree(edgeKeys[t],   sizeof(uint32_t) * edges);
+    mmapFree(edgeValues[t], sizeof(float)    * edges);
+  }
   for (size_t t=0; t<T; ++t) {
     mmapFree(sources[t], sizeof(uint32_t) * size / 4);
     mmapFree(targets[t], sizeof(uint32_t) * size / 4);
