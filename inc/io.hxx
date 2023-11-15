@@ -316,6 +316,24 @@ inline void convertToCsrOmpU(IIO offsets, IID degrees, IIK edgeKeys, IIE edgeVal
       if (weights) edgeValues[t % PARTS][i] = weights[t][m];
     }
   }
+  for (int t=0; t<PARTS; ++t)
+    exclusiveScanOmpW(&offsets[t][0], &buf[0], &degrees[t][0], rows);
+  #pragma omp parallel for schedule(static, 2048)
+  for (uint32_t u=0; u<rows; ++u)
+    degrees[PARTS][u] = degrees[0][u] + degrees[1][u] + degrees[2][u] + degrees[3][u];
+  exclusiveScanOmpW(&offsets[PARTS][0], &buf[0], &degrees[PARTS][0], rows);
+  #pragma omp parallel for schedule(dynamic, 2048)
+  for (uint32_t u=0; u<rows; ++u) {
+    for (int t=0; t<PARTS; ++t) {
+      size_t i = offsets[t][u];
+      size_t j = offsets[PARTS][u];
+      for (; i<offsets[t][u+1]; ++i, ++j) {
+        edgeKeys[PARTS][j] = edgeKeys[t][i];
+        if (weights) edgeValues[PARTS][j] = edgeValues[t][i];
+      }
+      offsets[PARTS][u] = j;
+    }
+  }
 }
 
 
