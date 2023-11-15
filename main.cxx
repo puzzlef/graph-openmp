@@ -125,7 +125,7 @@ int main(int argc, char **argv) {
   vector<uint32_t*> targets(T);
   vector<float*>    weights(T);
   vector<uint32_t*> degrees(T);
-  vector<size_t> counts;
+  vector<size_t>    counts;
   for (size_t t=0; t<T; ++t) {
     sources[t] = (uint32_t*) mmapAlloc(sizeof(uint32_t) * size / 4);
     targets[t] = (uint32_t*) mmapAlloc(sizeof(uint32_t) * size / 4);
@@ -138,6 +138,14 @@ int main(int argc, char **argv) {
   size_t rows, cols, edges, m = 0;
   size_t head = readMtxFormatHeaderW(symmetric, rows, cols, edges, data);
   data.remove_prefix(head);
+  vector<size_t*>   offsets(T);
+  vector<uint32_t*> edgeKeys(T);
+  vector<float*>    edgeValues(T);
+  for (int t=0; t<T; ++t) {
+    offsets[t]    = (size_t*)   mmapAlloc(sizeof(size_t)   * (rows+1));
+    edgeKeys[t]   = (uint32_t*) mmapAlloc(sizeof(uint32_t) * edges);
+    edgeValues[t] = (float*)    mmapAlloc(sizeof(float)    * edges);
+  }
   printf("rows=%zu, cols=%zu, edges=%zu\n", rows, cols, edges);
   double tr = measureDuration([&]() {
     counts = readEdgelistFormatOmpU<false, 4>(sources.data(), targets.data(), weights.data(), degrees.data(), data, symmetric, weighted);
