@@ -333,8 +333,8 @@ inline I parseNumberW(T& a, I ib, I ie) {
  */
 template <int FULL=0, class T, class I>
 inline I parseNumberSimdW(T& a, I ib, I ie) {
-  if constexpr      (is_integral<T>::value)       return parseIntegerSimdW<FULL>(a, ib, ie);
-  else if constexpr (is_floating_point<T>::value) return parseFloatSimdW<FULL>  (a, ib, ie);
+  if constexpr      (is_integral<T>::value)       return parseIntegerW<FULL>(a, ib, ie);
+  else if constexpr (is_floating_point<T>::value) return parseFloatW<FULL>  (a, ib, ie);
   return ib;
 }
 #pragma endregion
@@ -376,7 +376,7 @@ template <bool CHECK=false, class T, class I, class FU, class FW>
 inline I readNumberW(T& a, I ib, I ie, FU fu, FW fw) {
   auto [tb, te] = findNextToken(ib, ie, fu, fw);
   if constexpr (CHECK) { if (tb==te) throw FormatError("Failed to read number (empty)", tb); }
-  tb = parseNumberSimdW<CHECK? 2:1>(a, tb, te);
+  tb = parseNumberW<CHECK? 2:1>(a, tb, te);
   if constexpr (CHECK) { if (tb!=te) throw FormatError("Failed to read number (bad format)", tb); }
   return te;
 }

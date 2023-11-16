@@ -150,12 +150,12 @@ inline void readEdgelistFormatDoUnchecked(string_view data, bool symmetric, bool
     uint64_t u = 0, v = 0; double w = 1;
     it = findNextDigit(it, ie);
     if (it==ie) break;  // No more lines
-    it = parseWholeNumberSimdW(u, it, ie);  // Source vertex
+    it = parseWholeNumberW(u, it, ie);  // Source vertex
     it = findNextDigit(it, ie);
-    it = parseWholeNumberSimdW(v, it, ie);  // Target vertex
+    it = parseWholeNumberW(v, it, ie);  // Target vertex
     if (weighted) {
       it = findNextDigit(it, ie);
-      it = parseFloatSimdW(w, it, ie);  // Edge weight
+      it = parseFloatW(w, it, ie);  // Edge weight
     }
     if constexpr (BASE) { --u; --v; }
     fb(u, v, w);
