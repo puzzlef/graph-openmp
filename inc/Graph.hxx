@@ -107,16 +107,6 @@ class DiGraph {
   }
 
   /**
-   * Iterate over the vertices in the graph.
-   * @param fp process function (vertex id, vertex data)
-   */
-  template <class FP>
-  inline void forEachVertex(FP fp) noexcept {
-    for (K u=0; u<span(); ++u)
-      if (exists[u]) fp(u, values[u]);
-  }
-
-  /**
    * Iterate over the vertex ids in the graph.
    * @param fp process function (vertex id)
    */
@@ -133,16 +123,6 @@ class DiGraph {
    */
   template <class FP>
   inline void forEachEdge(K u, FP fp) const noexcept {
-    edges[u].forEach(fp);
-  }
-
-  /**
-   * Iterate over the outgoing edges of a source vertex in the graph.
-   * @param u source vertex id
-   * @param fp process function (target vertex id, edge weight)
-   */
-  template <class FP>
-  inline void forEachEdge(K u, FP fp) noexcept {
     edges[u].forEach(fp);
   }
 

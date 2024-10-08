@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <cstdint>
 #include "_algorithm.hxx"
-#include "_types.hxx"
+#include "_ctypes.hxx"
 
 using std::pair;
 using std::vector;
@@ -104,16 +104,6 @@ class LazyBitset {
   template <class F>
   inline void forEach(F fp) const noexcept {
     for (const auto& p : pairs)
-      fp(p.first, p.second);
-  }
-
-  /**
-   * Iterate over the entries in the bitset.
-   * @param fp process function (key, value)
-   */
-  template <class F>
-  inline void forEach(F fp) noexcept {
-    for (auto& p : pairs)
       fp(p.first, p.second);
   }
 
