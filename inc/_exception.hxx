@@ -1,10 +1,6 @@
 #pragma once
-#include <string>
-#include <string_view>
 #include <exception>
 
-using std::string;
-using std::string_view;
 using std::exception;
 
 
@@ -26,12 +22,6 @@ class FormatError : public exception {
   #pragma region CONSTRUCTORS
   public:
   /**
-   * Create an empty format error.
-   */
-  FormatError() :
-  msg(nullptr), it(nullptr) {}
-
-  /**
    * Create a format error.
    * @param msg error message
    * @param it iterator to the character where format check fails
@@ -39,6 +29,19 @@ class FormatError : public exception {
   template <class I>
   FormatError(const char *msg, I it) :
   msg(msg), it(&*it) {}
+
+  /**
+   * Create a format error, without iterator.
+   * @param msg error message
+   */
+  FormatError(const char *msg) :
+  msg(msg), it(nullptr) {}
+
+  /**
+   * Create an empty format error.
+   */
+  FormatError() :
+  msg(nullptr), it(nullptr) {}
   #pragma endregion
 
 
