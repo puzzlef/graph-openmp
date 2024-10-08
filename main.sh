@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
-#SBATCH -N 2
-#SBATCH -n 32
-#SBATCH --mem-per-cpu=1024
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=64
+#SBATCH --exclusive
+#SBATCH --job-name slurm
+#SBATCH --output=slurm.out
 # source scl_source enable gcc-toolset-11
 # module load hpcx-2.7.0/hpcx-ompi
-# module load openmpi/4.1.5
+# module load openmpi/4.1.5src="graph-openmp"
 src="graph-openmp"
 out="$HOME/Logs/$src.log"
 ulimit -s unlimited
@@ -18,7 +22,7 @@ fi
 cd $src
 
 # Fixed config
-: "${TYPE:=double}"
+: "${TYPE:=float}"
 : "${MAX_THREADS:=64}"
 : "${REPEAT_BATCH:=5}"
 : "${REPEAT_METHOD:=1}"
@@ -30,10 +34,11 @@ DEFINES=(""
 "-DREPEAT_METHOD=$REPEAT_METHOD"
 )
 
-# Run
+# Compile
 g++ ${DEFINES[*]} -std=c++17 -march=native -O3 -fopenmp main.cxx
 
-perform-all() {
+# Run on all graphs
+runAll() {
 # stdbuf --output=L ./a.out ~/Data/soc-Epinions1.mtx   2>&1 | tee -a "$out"
 stdbuf --output=L ./a.out ~/Data/indochina-2004.mtx  2>&1 | tee -a "$out"
 stdbuf --output=L ./a.out ~/Data/uk-2002.mtx         2>&1 | tee -a "$out"
@@ -50,11 +55,10 @@ stdbuf --output=L ./a.out ~/Data/kmer_A2a.mtx        2>&1 | tee -a "$out"
 stdbuf --output=L ./a.out ~/Data/kmer_V1r.mtx        2>&1 | tee -a "$out"
 }
 
-perform-all
-perform-all
-perform-all
-perform-all
-perform-all
+# Run 5 times
+for i in {1..5}; do
+  runAll
+done
 
 # Signal completion
 curl -X POST "https://maker.ifttt.com/trigger/puzzlef/with/key/${IFTTT_KEY}?value1=$src$1"

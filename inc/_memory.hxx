@@ -1,9 +1,11 @@
 #pragma once
 #include <cstdint>
 #include <vector>
+#include <algorithm>
 #include "_mman.hxx"
 
 using std::vector;
+using std::min;
 
 
 
@@ -30,7 +32,7 @@ class FixedArenaAllocator {
   /** Number of bytes used in the memory pool. */
   size_t used;
   /** These allocations have been freed, and can be reused. */
-  vector<void*> free;
+  vector<void*> freed;
   #pragma endregion
 
 
@@ -42,9 +44,9 @@ class FixedArenaAllocator {
    */
   inline void* alloc() {
     // Allocate from free list, if available.
-    if (!free.empty()) {
-      void *ptr = free.back();
-      free.pop_back();
+    if (!freed.empty()) {
+      void *ptr = freed.back();
+      freed.pop_back();
       return ptr;
     }
     // Allocate from pool.
@@ -62,7 +64,7 @@ class FixedArenaAllocator {
    * @param ptr memory to free
    */
   inline void free(void *ptr) {
-    free.push_back(ptr);
+    freed.push_back(ptr);
   }
   #pragma endregion
 
@@ -76,8 +78,24 @@ class FixedArenaAllocator {
    */
   FixedArenaAllocator(void *pool, size_t capacity) :
   pool(pool), capacity(capacity), used(0) {
-    free.reserve(min(capacity/SIZE, size_t(128)));
+    freed.reserve(min(capacity/SIZE, size_t(128)));
   }
   #pragma endregion
 };
+#pragma endregion
+
+
+
+
+#pragma region METHODS
+/**
+ * Get the number of bytes required to store N elements of type T.
+ * @tparam ALIGN memory alignment size [page-aligned]
+ * @param N number of elements to store
+ * @returns number of bytes required
+ */
+template <class T, size_t ALIGN=4096>
+inline constexpr size_t bytesof(size_t N) {
+  return ((N * sizeof(T) + ALIGN-1) / ALIGN) * ALIGN;
+}
 #pragma endregion
