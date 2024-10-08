@@ -13,6 +13,7 @@
 #include "_queue.hxx"
 #include "_bitset.hxx"
 #include "_mman.hxx"
+#include "_memory.hxx"
 #ifdef OPENMP
 #include "_openmp.hxx"
 #endif
