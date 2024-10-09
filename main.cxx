@@ -46,30 +46,27 @@ int main(int argc, char **argv) {
   omp_set_num_threads(MAX_THREADS);
   LOG("OMP_NUM_THREADS=%d\n", MAX_THREADS);
   LOG("Loading graph %s ...\n", file);
-  // Read graph in parallel.
-  // {
-  //   DiGraph<K, V, E> x;
-  //   double tr = measureDuration([&]() {
-  //     readMtxFormatFileToGraphOmpW(x, file, weighted);
-  //   });
-  //   LOG(""); println(x);
-  //   printf("{%09.1fms} %s\n", tr, "readMtxFormatFileToGraphOmpW");
-  // }
   // Read graph as CSR.
   {
-    printf("Reading graph as CSR ...\n");
     DiGraphCsr<K, V, E> xc;
-    printf("Mapping file to memory ...\n");
     MappedFile mf(file);
     size_t size = mf.size();
     string_view data((const char*) mf.data(), mf.size());
-    printf("Calling readMtxFormatToCsrListsOmpW ...\n");
     double tr = measureDuration([&]() {
-      if (weighted) readMtxFormatToCsrListsOmpW<true> (xc, data);
-      else          readMtxFormatToCsrListsOmpW<false>(xc, data);
+      if (weighted) readMtxFormatToCsrOmpW<true> (xc, data);
+      else          readMtxFormatToCsrOmpW<false>(xc, data);
     });
     LOG(""); println(xc);
-    printf("{%09.1fms} %s\n", tr, "readMtxFormatToCsrListsOmpW");
+    printf("{%09.1fms} %s\n", tr, "readMtxFormatToCsrOmpW");
+  }
+  // Read graph in parallel.
+  {
+    DiGraph<K, V, E> x;
+    double tr = measureDuration([&]() {
+      readMtxFormatFileToGraphOmpW(x, file, weighted);
+    });
+    LOG(""); println(x);
+    printf("{%09.1fms} %s\n", tr, "readMtxFormatFileToGraphOmpW");
   }
   printf("\n");
   return 0;

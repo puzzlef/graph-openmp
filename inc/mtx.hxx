@@ -1,6 +1,5 @@
 #pragma once
 #include <cstdint>
-#include <cstring>
 #include <type_traits>
 #include <utility>
 #include <tuple>
@@ -26,7 +25,6 @@ using std::string_view;
 using std::istream;
 using std::istringstream;
 using std::ifstream;
-using std::memmove;
 using std::move;
 using std::min;
 using std::max;
@@ -669,18 +667,17 @@ inline vector<size_t> readEdgelistFormatToListsOmpU(IIK degrees, IIK sources, II
 template <bool WEIGHTED=false, class IO, class IK, class IE>
 inline void convertEdgelistToCsrListsW(IO offsets, IK edgeKeys, IE edgeValues, IK degrees, IK sources, IK targets, IE weights, size_t rows) {
   using O = remove_reference_t<decltype(offsets[0])>;
-  // Compute offsets and populate CSR.
-  offsets[rows] = exclusiveScanW(offsets, degrees, rows);
+  // Compute shifted offsets.
+  offsets[0] = O();
+  exclusiveScanW(offsets+1, degrees, rows);
+  // Populate CSR.
   for (size_t i=0; i<rows; ++i) {
     size_t u = sources[i];
     size_t v = targets[i];
-    size_t j = offsets[u]++;
+    size_t j = offsets[u+1]++;
     edgeKeys[j] = v;
     if constexpr (WEIGHTED) edgeValues[j] = weights[i];
   }
-  // Fix offsets.
-  memmove(offsets+1, offsets, rows * sizeof(O));
-  offsets[0] = 0;
 }
 
 
@@ -727,7 +724,6 @@ inline void convertEdgelistToCsrListsOmpW(IIO offsets, IIK edgeKeys, IIE edgeVal
     return;
   }
   // Compute global degrees at degrees[0].
-  printf("Combining per-partition degrees\n");
   #pragma omp parallel for schedule(static, 2048)
   for (size_t u=0; u<rows; ++u) {
     if (PARTITIONS==1) {}
@@ -740,18 +736,15 @@ inline void convertEdgelistToCsrListsOmpW(IIO offsets, IIK edgeKeys, IIE edgeVal
     }
   }
   // Compute per-partition shifted offsets at offsets[p].
-  printf("Computing offsets and populating CSR (1)\n");
   for (int p=0; p<PARTITIONS; ++p) {
     offsets[p][0] = O();
     exclusiveScanOmpW(offsets[p]+1, buf.data(), degrees[p], rows);
   }
   // Populate per-partition CSR at edgeKeys[p] and edgeValues[p].
-  printf("Computing offsets and populating CSR (2)\n");
   #pragma omp parallel
   {
     int t = omp_get_thread_num();
     size_t I = counts[t];
-    printf("[T%02d] I=%zu\n", t, I);
     for (size_t i=0; i<I; ++i) {
       const int p = t % PARTITIONS;
       size_t u = sources[t][i];
@@ -763,12 +756,7 @@ inline void convertEdgelistToCsrListsOmpW(IIO offsets, IIK edgeKeys, IIE edgeVal
       if constexpr (WEIGHTED) edgeValues[p][j] = weights[t][i];
     }
   }
-  // Fix per-partition offsets.
-  // printf("Fixing per-partition offsets\n");
-  // for (int p=1; p<PARTITIONS; ++p)
-  //   subtractValuesOmpW(offsets[p], offsets[p], degrees[p], rows);
   // Populate global CSR at edgeKeys[0] and edgeValues[0], from per-partition CSRs.
-  printf("Combining per-partition CSRs\n");
   #pragma omp parallel for schedule(dynamic, 2048)
   for (size_t u=0; u<rows; ++u) {
     size_t j = offsets[0][u+1];
@@ -782,10 +770,6 @@ inline void convertEdgelistToCsrListsOmpW(IIO offsets, IIK edgeKeys, IIE edgeVal
     }
     offsets[0][u+1] = j;
   }
-  // Fix global offsets.
-  // printf("Fixing global offsets\n");
-  // memmove(offsets[0]+1, offsets[0], rows * sizeof(O));
-  // offsets[0][0] = O();
 }
 #pragma endregion
 
@@ -802,7 +786,7 @@ inline void convertEdgelistToCsrListsOmpW(IIO offsets, IIK edgeKeys, IIE edgeVal
  * @param data input data
  */
 template <bool WEIGHTED=false, int BASE=1, bool CHECK=false, class G>
-inline void readMtxFormatToCsrListsW(G& a, string_view data) {
+inline void readMtxFormatToCsrW(G& a, string_view data) {
   using K = typename G::key_type;
   using E = typename G::edge_value_type;
   // Read MTX format header.
@@ -841,22 +825,19 @@ inline void readMtxFormatToCsrListsW(G& a, string_view data) {
  * @param data input data
  */
 template <bool WEIGHTED=false, int BASE=1, bool CHECK=false, int PARTITIONS=4, class G>
-inline void readMtxFormatToCsrListsOmpW(G& a, string_view data) {
+inline void readMtxFormatToCsrOmpW(G& a, string_view data) {
   using O = typename G::offset_type;
   using K = typename G::key_type;
   using E = typename G::edge_value_type;
   // Read MTX format header.
-  printf("Reading header\n");
   bool symmetric; size_t rows, cols, size;
   size_t head = readMtxFormatHeaderW(symmetric, rows, cols, size, data);
   data.remove_prefix(head);
   // Allocate space for CSR.
-  printf("Allocating space for CSR\n");
   const size_t N = max(rows, cols);
   const size_t M = size;
   a.resize(N, M);
   // Allocate space for sources, targets, weights, degrees, offsets, edge keys, and edge values.
-  printf("Allocating space for sources, targets, weights, degrees, offsets, edge keys, and edge values\n");
   const int T = omp_get_max_threads();
   const size_t SOURCES = bytesof<K>(M);
   const size_t TARGETS = bytesof<K>(M);
@@ -889,11 +870,8 @@ inline void readMtxFormatToCsrListsOmpW(G& a, string_view data) {
     edgeKeys[i]   = (K*) (base + (PARTITIONS-1) * (DEGREES + OFFSETS) + (i-1) * EDGE_KEYS);
     edgeValues[i] = (E*) (base + (PARTITIONS-1) * (DEGREES + OFFSETS + EDGE_KEYS) + (i-1) * EDGE_VALUES);
   }
-  printf("CSR size: %zu\n", a.offsets.size());
   // Read Edgelist and convert to CSR.
-  printf("Reading Edgelist ...\n");
   vector<size_t> counts = readEdgelistFormatToListsOmpU<WEIGHTED, BASE, CHECK, PARTITIONS>(degrees, sources, targets, weights, data, symmetric);
-  printf("Converting to CSR ...\n");
   convertEdgelistToCsrListsOmpW<WEIGHTED, PARTITIONS>(offsets, edgeKeys, edgeValues, degrees, sources, targets, weights, counts, N);
 }
 #pragma endregion
