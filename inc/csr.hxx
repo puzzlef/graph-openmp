@@ -208,9 +208,10 @@ inline void csrCreateVertexValuesW(vector<V>& vertexValues, const G& x, const ve
  */
 template <class G, class K>
 inline void csrCreateEdgeKeysW(vector<K>& edgeKeys, const G& x) {
+  size_t S = x.span();
   size_t M = x.size();
   K i = K();
-  unordered_map<K, K> ids;
+  vector<K> ids(S);
   x.forEachVertexKey([&](auto u) { ids[u] = i++; });
   edgeKeys.clear();
   edgeKeys.reserve(M);
@@ -230,9 +231,10 @@ inline void csrCreateEdgeKeysW(vector<K>& edgeKeys, const G& x) {
  */
 template <class G, class K>
 inline void csrCreateEdgeKeysW(vector<K>& edgeKeys, const G& x, const vector<K>& ks) {
+  size_t S = x.span();
   size_t M = 0;
   K i = K();
-  unordered_map<K, K> ids;
+  vector<K> ids(S);
   for (auto u : ks) {
     M += x.degree(u);
     ids[u] = i++;
