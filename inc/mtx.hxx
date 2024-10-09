@@ -1,8 +1,8 @@
 #pragma once
 #include <cstdint>
 #include <cstring>
+#include <type_traits>
 #include <utility>
-#include <memory>
 #include <tuple>
 #include <vector>
 #include <string>
@@ -18,7 +18,7 @@
 #include <omp.h>
 #endif
 
-using std::unique_ptr;
+using std::remove_reference_t;
 using std::tuple;
 using std::vector;
 using std::string;
@@ -26,8 +26,7 @@ using std::string_view;
 using std::istream;
 using std::istringstream;
 using std::ifstream;
-using std::memcpy;
-using std::make_unique;
+using std::memmove;
 using std::move;
 using std::min;
 using std::max;
@@ -610,41 +609,39 @@ inline string_view readEdgelistFormatBlock(string_view data, size_t b, size_t B)
  * @returns per-thread number of edges read
  */
 template <bool WEIGHTED=false, int BASE=1, bool CHECK=false, int PARTITIONS=4, class IIK, class IIE>
-inline vector<unique_ptr<size_t>> readEdgelistFormatToListsOmpU(IIK degrees, IIK sources, IIK targets, IIE weights, string_view data, bool symmetric) {
+inline vector<size_t> readEdgelistFormatToListsOmpU(IIK degrees, IIK sources, IIK targets, IIE weights, string_view data, bool symmetric) {
   const size_t DATA  = data.size();
   const size_t BLOCK = 256 * 1024;  // Characters per block (256KB)
   const int T = omp_get_max_threads();
-  FormatError err;  // Common error
-  // Allocate space for per-thread index.
-  vector<unique_ptr<size_t>> is(T);
-  for (int t=0; t<T; ++t)
-    is[t] = make_unique<size_t>();
+  FormatError err;       // Common error
+  vector<size_t> is(T);  // Per-thread index
   // Process a grid in parallel with dynamic scheduling.
-  #pragma omp parallel for schedule(dynamic, 1) shared(err)
-  for (size_t b=0; b<DATA; b+=BLOCK) {
+  #pragma omp parallel shared(err)
+  {
     int    t = omp_get_thread_num();
-    // Get per-thread index.
-    size_t i = *is[t];
-    // Skip if error occurred.
-    if (CHECK && !err.empty()) continue;
-    // Read a block of data.
-    string_view bdata = readEdgelistFormatBlock(data, b, BLOCK);
-    auto fb = [&](auto u, auto v, auto w) {
-      // Record the edge.
-      sources[t][i] = u;
-      targets[t][i] = v;
-      if constexpr (WEIGHTED) weights[t][i] = w;
-      #pragma omp atomic
-      ++degrees[t % PARTITIONS][u];
-      ++i;
-    };
-    if constexpr (CHECK) {
-      try { readEdgelistFormatDo<WEIGHTED, BASE, true>(bdata, symmetric, fb); }
-      catch (const FormatError& e) { if (err.empty()) err = e; }
+    size_t i = 0;
+    #pragma omp for schedule(dynamic) nowait
+    for (size_t b=0; b<DATA; b+=BLOCK) {
+      if (CHECK && !err.empty()) continue;
+      // Read a block of data, and process it.
+      string_view bdata = readEdgelistFormatBlock(data, b, BLOCK);
+      auto fb = [&](auto u, auto v, auto w) {
+        const int p = t % PARTITIONS;
+        sources[t][i] = u;
+        targets[t][i] = v;
+        if constexpr (WEIGHTED) weights[t][i] = w;
+        #pragma omp atomic
+        ++degrees[p][u];
+        ++i;
+      };
+      if constexpr (CHECK) {
+        try { readEdgelistFormatDo<WEIGHTED, BASE, true>(bdata, symmetric, fb); }
+        catch (const FormatError& e) { if (err.empty()) err = e; }
+      }
+      else readEdgelistFormatDo<WEIGHTED, BASE>(bdata, symmetric, fb);
     }
-    else readEdgelistFormatDo<WEIGHTED, BASE>(bdata, symmetric, fb);
     // Update per-thread index.
-    *is[t] = i;
+    is[t] = i;
   }
   // Throw error if any.
   if (CHECK && !err.empty()) throw err;
@@ -671,9 +668,9 @@ inline vector<unique_ptr<size_t>> readEdgelistFormatToListsOmpU(IIK degrees, IIK
  */
 template <bool WEIGHTED=false, class IO, class IK, class IE>
 inline void convertEdgelistToCsrListsW(IO offsets, IK edgeKeys, IE edgeValues, IK degrees, IK sources, IK targets, IE weights, size_t rows) {
-  // Compute offsets.
-  exclusiveScanW(&offsets[0], &degrees[0][0], rows+1);
-  // Populate CSR format.
+  using O = remove_reference_t<decltype(offsets[0])>;
+  // Compute offsets and populate CSR.
+  offsets[rows] = exclusiveScanW(offsets, degrees, rows);
   for (size_t i=0; i<rows; ++i) {
     size_t u = sources[i];
     size_t v = targets[i];
@@ -682,7 +679,7 @@ inline void convertEdgelistToCsrListsW(IO offsets, IK edgeKeys, IE edgeValues, I
     if constexpr (WEIGHTED) edgeValues[j] = weights[i];
   }
   // Fix offsets.
-  memcpy(&offsets[1], &offsets[0], rows * sizeof(offsets[0]));
+  memmove(offsets+1, offsets, rows * sizeof(O));
   offsets[0] = 0;
 }
 
@@ -691,100 +688,104 @@ inline void convertEdgelistToCsrListsW(IO offsets, IK edgeKeys, IE edgeValues, I
  * Convert Edgelist to CSR (lists).
  * @tparam WEIGHTED is graph weighted?
  * @tparam PARTITIONS number of partitions for vertex degrees
- * @param offsets CSR offsets (output)
- * @param edgeKeys CSR edge keys (output)
- * @param edgeValues CSR edge values (output)
- * @param poffsets per-partition CSR offsets (output)
- * @param pedgeKeys per-partition CSR edge keys (output)
- * @param pedgeValues per-partition CSR edge values (output)
+ * @param offsets per-partition CSR offsets (output)
+ * @param edgeKeys per-partition CSR edge keys (output)
+ * @param edgeValues per-partition CSR edge values (output)
  * @param degrees per-partition vertex degrees
  * @param sources per-thread source vertices
  * @param targets per-thread target vertices
  * @param weights per-thread edge weights
  * @param counts per-thread number of edges read
  * @param rows number of rows/vertices
+ * @note offsets[0], edgeKeys[0], and edgeValues[0] are special.
+ * @note They are used to store global offsets, edge keys, and edge values.
  */
-template <bool WEIGHTED=false, int PARTITIONS=4, class IO, class IK, class IE, class IIO, class IIK, class IIE>
-inline void convertEdgelistToCsrListsOmpW(IO offsets, IK edgeKeys, IE edgeValues, IIO poffsets, IIK pedgeKeys, IIE pedgeValues, IIK degrees, IIK sources, IIK targets, IIE weights, const vector<unique_ptr<size_t>>& counts, size_t rows) {
-  int T = omp_get_max_threads();
+template <bool WEIGHTED=false, int PARTITIONS=4, class IIO, class IIK, class IIE>
+inline void convertEdgelistToCsrListsOmpW(IIO offsets, IIK edgeKeys, IIE edgeValues, IIK degrees, IIK sources, IIK targets, IIE weights, const vector<size_t>& counts, size_t rows) {
+  using O = remove_reference_t<decltype(offsets[0][0])>;
+  int   T = omp_get_max_threads();
   vector<size_t> buf(T);
-  // Compute offsets.
-  if (PARTITIONS==1) exclusiveScanOmpW(&offsets[0], &buf[0], &degrees[0][0], rows+1);
-  else {
-    for (int t=0; t<PARTITIONS; ++t)
-      exclusiveScanOmpW(&poffsets[t][0], &buf[0], &degrees[t][0], rows+1);
-  }
   if (PARTITIONS==1) {
-    // Populate CSR format.
+    // Compute shifted global offsets at offsets[0].
+    offsets[0][0] = O();
+    exclusiveScanOmpW(offsets[0]+1, buf.data(), degrees[0], rows);
+    // Populate global CSR at edgeKeys[0] and edgeValues[0].
     #pragma omp parallel
     {
       int t = omp_get_thread_num();
-      size_t I = *counts[t];
+      size_t I = counts[t];
       for (size_t i=0; i<I; ++i) {
         size_t u = sources[t][i];
         size_t v = targets[t][i];
         size_t j = 0;
         #pragma omp atomic capture
-        j = offsets[u]++;
-        edgeKeys[j] = v;
-        if constexpr (WEIGHTED) edgeValues[j] = weights[t][i];
+        j = offsets[0][u+1]++;
+        edgeKeys[0][j] = v;
+        if constexpr (WEIGHTED) edgeValues[0][j] = weights[t][i];
       }
     }
-    // Fix offsets.
-    memcpy(&offsets[1], &offsets[0], rows * sizeof(offsets[0]));
-    offsets[0] = 0;
+    return;
   }
-  else {
-    // Populate per-partition CSR format.
-    #pragma omp parallel
-    {
-      int t = omp_get_thread_num();
-      size_t I = *counts[t];
-      for (size_t i=0; i<I; ++i) {
-        size_t u = sources[t][i];
-        size_t v = targets[t][i];
-        size_t j = 0;
-        #pragma omp atomic capture
-        j = poffsets[t % PARTITIONS][u]++;
-        pedgeKeys[t % PARTITIONS][j] = v;
-        if constexpr (WEIGHTED) pedgeValues[t % PARTITIONS][j] = weights[t][i];
-      }
-    }
-    // Fix per-partition offsets.
-    #pragma omp parallel
-    {
-      int t = omp_get_thread_num();
-      if (t<PARTITIONS) memcpy(&poffsets[t][1], &poffsets[t][0], rows * sizeof(poffsets[t][0]));
-      if (t<PARTITIONS) poffsets[t][0] = 0;
-    }
-    // Combine per-partition degrees.
-    #pragma omp parallel for schedule(static, 2048)
-    for (size_t u=0; u<rows; ++u) {
-      if (PARTITIONS==1) {}
-      else if (PARTITIONS==2) degrees[0][u] += degrees[1][u];
-      else if (PARTITIONS==4) degrees[0][u] += degrees[1][u] + degrees[2][u] + degrees[3][u];
-      else if (PARTITIONS==8) degrees[0][u] += degrees[1][u] + degrees[2][u] + degrees[3][u] + degrees[4][u] + degrees[5][u] + degrees[6][u] + degrees[7][u];
-      else {
-        for (int t=1; t<PARTITIONS; ++t)
-          degrees[0][u] += degrees[t][u];
-      }
-    }
-    // Compute global offsets.
-    exclusiveScanOmpW(&offsets[0], &buf[0], &degrees[0][0], rows+1);
-    // Combine per-partition CSR format.
-    #pragma omp parallel for schedule(dynamic, 2048)
-    for (size_t u=0; u<rows; ++u) {
-      size_t j = offsets[u];
-      for (int t=0; t<PARTITIONS; ++t) {
-        size_t i = poffsets[t][u];
-        size_t I = poffsets[t][u+1];
-        for (; i<I; ++i, ++j) {
-          edgeKeys[j] = pedgeKeys[t][i];
-          if constexpr (WEIGHTED) edgeValues[j] = pedgeValues[t][i];
-        }
-      }
+  // Compute global degrees at degrees[0].
+  printf("Combining per-partition degrees\n");
+  #pragma omp parallel for schedule(static, 2048)
+  for (size_t u=0; u<rows; ++u) {
+    if (PARTITIONS==1) {}
+    else if (PARTITIONS==2) degrees[0][u] += degrees[1][u];
+    else if (PARTITIONS==4) degrees[0][u] += degrees[1][u] + degrees[2][u] + degrees[3][u];
+    else if (PARTITIONS==8) degrees[0][u] += degrees[1][u] + degrees[2][u] + degrees[3][u] + degrees[4][u] + degrees[5][u] + degrees[6][u] + degrees[7][u];
+    else {
+      for (int t=1; t<PARTITIONS; ++t)
+        degrees[0][u] += degrees[t][u];
     }
   }
+  // Compute per-partition shifted offsets at offsets[p].
+  printf("Computing offsets and populating CSR (1)\n");
+  for (int p=0; p<PARTITIONS; ++p) {
+    offsets[p][0] = O();
+    exclusiveScanOmpW(offsets[p]+1, buf.data(), degrees[p], rows);
+  }
+  // Populate per-partition CSR at edgeKeys[p] and edgeValues[p].
+  printf("Computing offsets and populating CSR (2)\n");
+  #pragma omp parallel
+  {
+    int t = omp_get_thread_num();
+    size_t I = counts[t];
+    printf("[T%02d] I=%zu\n", t, I);
+    for (size_t i=0; i<I; ++i) {
+      const int p = t % PARTITIONS;
+      size_t u = sources[t][i];
+      size_t v = targets[t][i];
+      size_t j = 0;
+      #pragma omp atomic capture
+      j = offsets[p][u+1]++;
+      edgeKeys[p][j] = v;
+      if constexpr (WEIGHTED) edgeValues[p][j] = weights[t][i];
+    }
+  }
+  // Fix per-partition offsets.
+  // printf("Fixing per-partition offsets\n");
+  // for (int p=1; p<PARTITIONS; ++p)
+  //   subtractValuesOmpW(offsets[p], offsets[p], degrees[p], rows);
+  // Populate global CSR at edgeKeys[0] and edgeValues[0], from per-partition CSRs.
+  printf("Combining per-partition CSRs\n");
+  #pragma omp parallel for schedule(dynamic, 2048)
+  for (size_t u=0; u<rows; ++u) {
+    size_t j = offsets[0][u+1];
+    for (int p=1; p<PARTITIONS; ++p) {
+      size_t i = offsets[p][u];
+      size_t I = offsets[p][u+1];
+      for (; i<I; ++i, ++j) {
+        edgeKeys[0][j] = edgeKeys[p][i];
+        if constexpr (WEIGHTED) edgeValues[0][j] = edgeValues[p][i];
+      }
+    }
+    offsets[0][u+1] = j;
+  }
+  // Fix global offsets.
+  // printf("Fixing global offsets\n");
+  // memmove(offsets[0]+1, offsets[0], rows * sizeof(O));
+  // offsets[0][0] = O();
 }
 #pragma endregion
 
@@ -845,19 +846,22 @@ inline void readMtxFormatToCsrListsOmpW(G& a, string_view data) {
   using K = typename G::key_type;
   using E = typename G::edge_value_type;
   // Read MTX format header.
+  printf("Reading header\n");
   bool symmetric; size_t rows, cols, size;
   size_t head = readMtxFormatHeaderW(symmetric, rows, cols, size, data);
   data.remove_prefix(head);
   // Allocate space for CSR.
+  printf("Allocating space for CSR\n");
   const size_t N = max(rows, cols);
   const size_t M = size;
   a.resize(N, M);
   // Allocate space for sources, targets, weights, degrees, offsets, edge keys, and edge values.
+  printf("Allocating space for sources, targets, weights, degrees, offsets, edge keys, and edge values\n");
   const int T = omp_get_max_threads();
   const size_t SOURCES = bytesof<K>(M);
   const size_t TARGETS = bytesof<K>(M);
   const size_t WEIGHTS = bytesof<E>(M);
-  const size_t DEGREES     = bytesof<K>(N);
+  const size_t DEGREES     = bytesof<K>(N+1);
   const size_t OFFSETS     = bytesof<O>(N+1);
   const size_t EDGE_KEYS   = bytesof<K>(M);
   const size_t EDGE_VALUES = bytesof<E>(M);
@@ -874,16 +878,23 @@ inline void readMtxFormatToCsrListsOmpW(G& a, string_view data) {
   vector<O*> offsets(PARTITIONS);
   vector<K*> edgeKeys(PARTITIONS);
   vector<E*> edgeValues(PARTITIONS);
+  degrees[0]    = a.degrees.data();
+  offsets[0]    = a.offsets.data();
+  edgeKeys[0]   = a.edgeKeys.data();
+  edgeValues[0] = a.edgeValues.data();
   const char *base = buf.data() + T * (SOURCES + TARGETS + WEIGHTS);
-  for (int i=0; i<PARTITIONS; ++i) {
+  for (int i=1; i<PARTITIONS; ++i) {
     degrees[i]    = (K*) (base + (i-1) * DEGREES);
     offsets[i]    = (O*) (base + (PARTITIONS-1) * (DEGREES) + (i-1) * OFFSETS);
     edgeKeys[i]   = (K*) (base + (PARTITIONS-1) * (DEGREES + OFFSETS) + (i-1) * EDGE_KEYS);
     edgeValues[i] = (E*) (base + (PARTITIONS-1) * (DEGREES + OFFSETS + EDGE_KEYS) + (i-1) * EDGE_VALUES);
   }
+  printf("CSR size: %zu\n", a.offsets.size());
   // Read Edgelist and convert to CSR.
-  vector<unique_ptr<size_t>> counts = readEdgelistFormatToListsOmpU<WEIGHTED, BASE, CHECK, PARTITIONS>(degrees, sources, targets, weights, data, symmetric);
-  convertEdgelistToCsrListsOmpW<WEIGHTED, PARTITIONS>(a.offsets.data(), a.edgeKeys.data(), a.edgeValues.data(), offsets, edgeKeys, edgeValues, degrees, sources, targets, weights, counts, N);
+  printf("Reading Edgelist ...\n");
+  vector<size_t> counts = readEdgelistFormatToListsOmpU<WEIGHTED, BASE, CHECK, PARTITIONS>(degrees, sources, targets, weights, data, symmetric);
+  printf("Converting to CSR ...\n");
+  convertEdgelistToCsrListsOmpW<WEIGHTED, PARTITIONS>(offsets, edgeKeys, edgeValues, degrees, sources, targets, weights, counts, N);
 }
 #pragma endregion
 #pragma endregion
