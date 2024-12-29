@@ -96,7 +96,7 @@ int main(int argc, char **argv) {
   ptrs.clear();
   auto t2 = timeNow();
   void *pool = mmapAlloc(COUNT * EACH);
-  ConcurrentArenaAllocator<EACH> arena(pool, EACH*COUNT);
+  ConcurrentArenaAllocator<EACH, EACH*COUNT> arena(pool);
   #pragma omp parallel for schedule(dynamic, 2048)
   for (int i=0; i<COUNT; ++i)
     ptrs.push_back(arena.allocate());

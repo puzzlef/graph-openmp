@@ -98,9 +98,12 @@ $ ...
 
 ## References
 
+- [Is it fair to always recommend std::vector over realloc?](https://stackoverflow.com/a/22933870)
+- [What is the ideal growth rate for a dynamically allocated array?](https://stackoverflow.com/a/1100426)
+- [When does a std::vector enlarge itself when we push_back elements?](https://stackoverflow.com/a/45403715)
 - [How can I convert a std::string to int?](https://stackoverflow.com/a/7664227/1413259)
 - [Fastest way to read numerical values from text file in C++ (double in this case)](https://stackoverflow.com/a/5678975/1413259)
-- [What's the difference between istringstream, ostringstream and stringstream? / Why not use stringstream in every case?](https://stackoverflow.com/a/3292168/1413259)
+- [What's the difference between istringstream, ostringstream and stringstream?](https://stackoverflow.com/a/3292168/1413259)
 - [c++ stringstream is too slow, how to speed up?](https://stackoverflow.com/a/5830907/1413259)
 - [Best Approach to read huge files utilizing multithreading; Stephan van Hulst :: Coderanch](https://coderanch.com/t/699934/java/Approach-read-huge-files-utilizing)
 - [How to get current time and date in C++?](https://stackoverflow.com/a/997988/1413259)
@@ -108,14 +111,20 @@ $ ...
 - [Is 'signed size_t' different from 'ssize_t'?](https://stackoverflow.com/q/20744349/1413259)
 - [How to create a temporary directory?](https://stackoverflow.com/a/4632032/1413259)
 - [How to amend a commit without changing commit message (reusing the previous one)?](https://stackoverflow.com/a/10365442/1413259)
+- [What does the explicit keyword mean?](https://stackoverflow.com/a/121163)
 - [Syntax for a single-line while loop in Bash](https://stackoverflow.com/a/1289029/1413259)
 - [How can I save username and password in Git?](https://stackoverflow.com/a/35942890/1413259)
 - [How do I tell git to use fewer cores/threads when compressing?](https://superuser.com/a/539478/305990)
+- [std::allocator :: cppreference](https://en.cppreference.com/w/cpp/memory/allocator)
+- [std::deque :: cppreference](https://en.cppreference.com/w/cpp/container/deque)
 - [Containers library :: cppreference](https://en.cppreference.com/w/cpp/container)
 - [Date and time utilities :: cppreference](https://en.cppreference.com/w/cpp/chrono)
 - [Standard library header &lt;string&gt; :: cppreference](https://en.cppreference.com/w/cpp/header/string)
 - [Standard library header &lt;algorithm&gt; :: cppreference](https://en.cppreference.com/w/cpp/header/algorithm)
+- [folly/FBVector.h :: Facebook Open Source](https://github.com/facebook/folly/blob/main/folly/docs/FBVector.md)
+- [WebGraph, a framework for graph compression aimed at studying web graphs :: Sebastiano Vigna (2005)](https://webgraph.di.unimi.it)
 - [The University of Florida Sparse Matrix Collection; Timothy A. Davis et al. (2011)](https://doi.org/10.1145/2049662.2049663)
+- [Compiler Explorer](https://godbolt.org)
 
 <br>
 <br>
