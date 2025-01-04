@@ -287,13 +287,14 @@ inline vector<size_t> readEdgelistFormatToListsOmpU(IIK degrees, IIK sources, II
  * @param targets target vertices
  * @param weights edge weights
  * @param rows number of rows/vertices
+ * @returns number of edges in the Edgelist
  */
 template <bool WEIGHTED=false, class IO, class IK, class IE>
-inline void convertEdgelistToCsrListsW(IO offsets, IK edgeKeys, IE edgeValues, IK degrees, IK sources, IK targets, IE weights, size_t rows) {
+inline size_t convertEdgelistToCsrListsW(IO offsets, IK edgeKeys, IE edgeValues, IK degrees, IK sources, IK targets, IE weights, size_t rows) {
   using O = remove_reference_t<decltype(offsets[0])>;
   // Compute shifted offsets.
   offsets[0] = O();
-  exclusiveScanW(offsets+1, degrees, rows);
+  size_t   M = exclusiveScanW(offsets+1, degrees, rows);
   // Populate CSR.
   for (size_t i=0; i<rows; ++i) {
     size_t u = sources[i];
@@ -302,6 +303,7 @@ inline void convertEdgelistToCsrListsW(IO offsets, IK edgeKeys, IE edgeValues, I
     edgeKeys[j] = v;
     if constexpr (WEIGHTED) edgeValues[j] = weights[i];
   }
+  return M;
 }
 
 
@@ -318,18 +320,20 @@ inline void convertEdgelistToCsrListsW(IO offsets, IK edgeKeys, IE edgeValues, I
  * @param weights per-thread edge weights
  * @param counts per-thread number of edges read
  * @param rows number of rows/vertices
+ * @returns number of edges in the Edgelist
  * @note offsets[0], edgeKeys[0], and edgeValues[0] are special.
  * @note They are used to store global offsets, edge keys, and edge values.
  */
 template <bool WEIGHTED=false, int PARTITIONS=4, class IIO, class IIK, class IIE>
-inline void convertEdgelistToCsrListsOmpW(IIO offsets, IIK edgeKeys, IIE edgeValues, IIK degrees, IIK sources, IIK targets, IIE weights, const vector<size_t>& counts, size_t rows) {
-  using O = remove_reference_t<decltype(offsets[0][0])>;
-  int   T = omp_get_max_threads();
+inline size_t convertEdgelistToCsrListsOmpW(IIO offsets, IIK edgeKeys, IIE edgeValues, IIK degrees, IIK sources, IIK targets, IIE weights, const vector<size_t>& counts, size_t rows) {
+  using  O = remove_reference_t<decltype(offsets[0][0])>;
+  int    T = omp_get_max_threads();
+  size_t M = 0;
   vector<size_t> buf(T);
   if (PARTITIONS==1) {
     // Compute shifted global offsets at offsets[0].
     offsets[0][0] = O();
-    exclusiveScanOmpW(offsets[0]+1, buf.data(), degrees[0], rows);
+    M = exclusiveScanOmpW(offsets[0]+1, buf.data(), degrees[0], rows);
     // Populate global CSR at edgeKeys[0] and edgeValues[0].
     #pragma omp parallel
     {
@@ -345,7 +349,7 @@ inline void convertEdgelistToCsrListsOmpW(IIO offsets, IIK edgeKeys, IIE edgeVal
         if constexpr (WEIGHTED) edgeValues[0][j] = weights[t][i];
       }
     }
-    return;
+    return M;
   }
   // Compute global degrees at degrees[0].
   #pragma omp parallel for schedule(static, 2048)
@@ -362,7 +366,8 @@ inline void convertEdgelistToCsrListsOmpW(IIO offsets, IIK edgeKeys, IIE edgeVal
   // Compute per-partition shifted offsets at offsets[p].
   for (int p=0; p<PARTITIONS; ++p) {
     offsets[p][0] = O();
-    exclusiveScanOmpW(offsets[p]+1, buf.data(), degrees[p], rows);
+    size_t MP = exclusiveScanOmpW(offsets[p]+1, buf.data(), degrees[p], rows);
+    if (p==0) M = MP;
   }
   // Populate per-partition CSR at edgeKeys[p] and edgeValues[p].
   #pragma omp parallel
@@ -394,6 +399,7 @@ inline void convertEdgelistToCsrListsOmpW(IIO offsets, IIK edgeKeys, IIE edgeVal
     }
     offsets[0][u+1] = j;
   }
+  return M;
 }
 #pragma endregion
 
@@ -419,7 +425,7 @@ inline void readMtxFormatToCsrW(G& a, string_view data) {
   data.remove_prefix(head);
   // Allocate space for CSR.
   const size_t N = max(rows, cols);
-  const size_t M = size;
+  const size_t M = symmetric? 2 * size : size;
   a.resize(N, M);
   // Allocate space for sources, targets, and weights.
   K *sources = new K[M];
@@ -431,7 +437,8 @@ inline void readMtxFormatToCsrW(G& a, string_view data) {
   E *edgeValues = WEIGHTED? a.edgeValues.data() : nullptr;
   // Read Edgelist and convert to CSR.
   readEdgelistFormatToListsU<WEIGHTED, BASE, CHECK>(degrees, sources, targets, weights, data, symmetric);
-  convertEdgelistToCsrListsW<WEIGHTED>(offsets, edgeKeys, edgeValues, degrees, sources, targets, weights, N);
+  size_t MA = convertEdgelistToCsrListsW<WEIGHTED>(offsets, edgeKeys, edgeValues, degrees, sources, targets, weights, N);
+  if (symmetric) a.resize(N, MA);
   // Free space for sources, targets, and weights.
   delete sources;
   delete targets;
@@ -459,7 +466,7 @@ inline void readMtxFormatToCsrOmpW(G& a, string_view data) {
   data.remove_prefix(head);
   // Allocate space for CSR.
   const size_t N = max(rows, cols);
-  const size_t M = size;
+  const size_t M = symmetric? 2 * size : size;
   a.resize(N, M);
   // Allocate space for sources, targets, weights.
   const int T = omp_get_max_threads();
@@ -490,7 +497,8 @@ inline void readMtxFormatToCsrOmpW(G& a, string_view data) {
   }
   // Read Edgelist and convert to CSR.
   vector<size_t> counts = readEdgelistFormatToListsOmpU<WEIGHTED, BASE, CHECK, PARTITIONS>(degrees, sources, targets, weights, data, symmetric);
-  convertEdgelistToCsrListsOmpW<WEIGHTED, PARTITIONS>(offsets, edgeKeys, edgeValues, degrees, sources, targets, weights, counts, N);
+  size_t MA = convertEdgelistToCsrListsOmpW<WEIGHTED, PARTITIONS>(offsets, edgeKeys, edgeValues, degrees, sources, targets, weights, counts, N);
+  if (symmetric) a.resize(N, MA);
   // Free space for sources, targets, and weights.
   for (int i=0; i<T; ++i) {
     delete sources[i];
