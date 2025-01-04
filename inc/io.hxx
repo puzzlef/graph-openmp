@@ -422,20 +422,20 @@ inline void readMtxFormatToCsrW(G& a, string_view data) {
   const size_t M = size;
   a.resize(N, M);
   // Allocate space for sources, targets, and weights.
-  const size_t SOURCES = bytesof<K>(M);
-  const size_t TARGETS = bytesof<K>(M);
-  const size_t WEIGHTS = bytesof<E>(M);
-  MappedPtr<char> buf(SOURCES + TARGETS + WEIGHTS);
-  K *sources = (K*) buf.data();
-  K *targets = (K*) (buf.data() + SOURCES);
-  E *weights = (E*) (buf.data() + SOURCES + TARGETS);
-  K *degrees = a.degrees.data();
-  K *offsets = a.offsets.data();
-  K *edgeKeys = a.edgeKeys.data();
-  E *edgeValues = a.edgeValues.data();
+  K *sources = new K[M];
+  K *targets = new K[M];
+  E *weights = WEIGHTED? new E[M] : nullptr;
+  K *degrees    = a.degrees.data();
+  K *offsets    = a.offsets.data();
+  K *edgeKeys   = a.edgeKeys.data();
+  E *edgeValues = WEIGHTED? a.edgeValues.data() : nullptr;
   // Read Edgelist and convert to CSR.
   readEdgelistFormatToListsU<WEIGHTED, BASE, CHECK>(degrees, sources, targets, weights, data, symmetric);
   convertEdgelistToCsrListsW<WEIGHTED>(offsets, edgeKeys, edgeValues, degrees, sources, targets, weights, N);
+  // Free space for sources, targets, and weights.
+  delete sources;
+  delete targets;
+  if (WEIGHTED) delete weights;
 }
 
 
@@ -461,24 +461,19 @@ inline void readMtxFormatToCsrOmpW(G& a, string_view data) {
   const size_t N = max(rows, cols);
   const size_t M = size;
   a.resize(N, M);
-  // Allocate space for sources, targets, weights, degrees, offsets, edge keys, and edge values.
+  // Allocate space for sources, targets, weights.
   const int T = omp_get_max_threads();
-  const size_t SOURCES = bytesof<K>(M);
-  const size_t TARGETS = bytesof<K>(M);
-  const size_t WEIGHTS = bytesof<E>(M);
-  const size_t DEGREES     = bytesof<K>(N+1);
-  const size_t OFFSETS     = bytesof<O>(N+1);
-  const size_t EDGE_KEYS   = bytesof<K>(M);
-  const size_t EDGE_VALUES = bytesof<E>(M);
-  MappedPtr<char> buf(T * (SOURCES + TARGETS + WEIGHTS) + (PARTITIONS-1) * (DEGREES + OFFSETS + EDGE_KEYS + EDGE_VALUES));
   vector<K*> sources(T);
   vector<K*> targets(T);
   vector<E*> weights(T);
   for (int i=0; i<T; ++i) {
-    sources[i] = (K*) (buf.data() + i * SOURCES);
-    targets[i] = (K*) (buf.data() + T * (SOURCES) + i * TARGETS);
-    weights[i] = (E*) (buf.data() + T * (SOURCES + TARGETS) + i * WEIGHTS);
+    sources[i] = new K[M];
+    targets[i] = new K[M];
+    weights[i] = WEIGHTED? new E[M] : nullptr;
   }
+  // Allocate space for degrees, offsets, edge keys, and edge values
+  // Note that degrees[0], offsets[0], edgeKeys[0], and edgeValues[0] are special.
+  // They point to the global degrees, offsets, edge keys, and edge values in the CSR.
   vector<K*> degrees(PARTITIONS);
   vector<O*> offsets(PARTITIONS);
   vector<K*> edgeKeys(PARTITIONS);
@@ -486,17 +481,29 @@ inline void readMtxFormatToCsrOmpW(G& a, string_view data) {
   degrees[0]    = a.degrees.data();
   offsets[0]    = a.offsets.data();
   edgeKeys[0]   = a.edgeKeys.data();
-  edgeValues[0] = a.edgeValues.data();
-  const char *base = buf.data() + T * (SOURCES + TARGETS + WEIGHTS);
+  edgeValues[0] = WEIGHTED? a.edgeValues.data() : nullptr;
   for (int i=1; i<PARTITIONS; ++i) {
-    degrees[i]    = (K*) (base + (i-1) * DEGREES);
-    offsets[i]    = (O*) (base + (PARTITIONS-1) * (DEGREES) + (i-1) * OFFSETS);
-    edgeKeys[i]   = (K*) (base + (PARTITIONS-1) * (DEGREES + OFFSETS) + (i-1) * EDGE_KEYS);
-    edgeValues[i] = (E*) (base + (PARTITIONS-1) * (DEGREES + OFFSETS + EDGE_KEYS) + (i-1) * EDGE_VALUES);
+    degrees[i]    = new K[N+1];
+    offsets[i]    = new O[N+1];
+    edgeKeys[i]   = new K[M];
+    edgeValues[i] = WEIGHTED? new E[M] : nullptr;
   }
   // Read Edgelist and convert to CSR.
   vector<size_t> counts = readEdgelistFormatToListsOmpU<WEIGHTED, BASE, CHECK, PARTITIONS>(degrees, sources, targets, weights, data, symmetric);
   convertEdgelistToCsrListsOmpW<WEIGHTED, PARTITIONS>(offsets, edgeKeys, edgeValues, degrees, sources, targets, weights, counts, N);
+  // Free space for sources, targets, and weights.
+  for (int i=0; i<T; ++i) {
+    delete sources[i];
+    delete targets[i];
+    if (WEIGHTED) delete weights[i];
+  }
+  // Free space for degrees, offsets, edge keys, and edge values.
+  for (int i=1; i<PARTITIONS; ++i) {
+    delete degrees[i];
+    delete offsets[i];
+    delete edgeKeys[i];
+    if (WEIGHTED) delete edgeValues[i];
+  }
 }
 #pragma endregion
 
