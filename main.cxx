@@ -58,41 +58,12 @@ int main(int argc, char **argv) {
     });
     LOG(""); println(xc);
     printf("{%09.1fms} %s\n", tr, "readMtxFormatToCsrOmpW");
-  }
-  // Read graph-ps in parallel.
-  {
-    // DiGraph<K, V, E> x;
-    // MappedFile mf(file);
-    // size_t size = mf.size();
-    // string_view data((const char*) mf.data(), mf.size());
-    // double tr = measureDuration([&]() {
-    //   if (weighted) readMtxFormatToGraphPsOmpW<true> (x, data);
-    //   else          readMtxFormatToGraphPsOmpW<false>(x, data);
-    // });
-    // LOG(""); println(x);
-    // printf("{%09.1fms} %s\n", tr, "readMtxFormatToGraphFromCsrOmpW");
-  }
-  // Read graph-ps in parallel.
-  {
-    // DiGraph<K, V, E> x;
-    // MappedFile mf(file);
-    // size_t size = mf.size();
-    // string_view data((const char*) mf.data(), mf.size());
-    // double tr = measureDuration([&]() {
-    //   if (weighted) readMtxFormatToGraphSpOmpW<true> (x, data);
-    //   else          readMtxFormatToGraphSpOmpW<false>(x, data);
-    // });
-    // LOG(""); println(x);
-    // printf("{%09.1fms} %s\n", tr, "readMtxFormatToGraphFromEdgelistsOmpW");
-  }
-  // Read graph in parallel.
-  {
-    // DiGraph<K, V, E> x;
-    // double tr = measureDuration([&]() {
-    //   readMtxFormatFileToGraphOmpW(x, file, weighted);
-    // });
-    // LOG(""); println(x);
-    // printf("{%09.1fms} %s\n", tr, "readMtxFormatFileToGraphOmpW");
+    DiGraph<K, V, E> x;
+    double ts = measureDuration([&]() {
+      duplicateOmpW(x, xc);
+    });
+    LOG(""); println(x);
+    printf("{%09.1fms} %s\n", ts, "duplicateOmpW");
   }
   printf("\n");
   return 0;
