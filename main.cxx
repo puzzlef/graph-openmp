@@ -64,6 +64,13 @@ int main(int argc, char **argv) {
     });
     LOG(""); println(x);
     printf("{%09.1fms} %s\n", ts, "duplicateOmpW");
+
+    ArenaDiGraph<K, V, E> xa;
+    double ta = measureDuration([&]() {
+      duplicateArenaOmpW(xa, xc);
+    });
+    LOG(""); println(xa);
+    printf("{%09.1fms} %s\n", ta, "duplicateArenaOmpW");
   }
   printf("\n");
   return 0;

@@ -1,7 +1,9 @@
 #pragma once
+#include <type_traits>
 #include <cmath>
 #include <random>
 
+using std::is_integral_v;
 using std::uniform_int_distribution;
 using std::ceil;
 using std::sqrt;
@@ -63,6 +65,25 @@ inline int sgn(T x) {
 
 
 
+#pragma region BITWISE OPERATIONS
+/**
+ * Count the number of leading zeros in a value.
+ * @param x the value
+ * @returns number of leading zeros
+ */
+template <class T>
+inline constexpr int countLeadingZeros(T x) noexcept {
+  static_assert(is_integral_v<T>, "clz only works with integral types");
+  if constexpr (sizeof(T) <= sizeof(unsigned int))       return __builtin_clz(x);
+  if constexpr (sizeof(T) <= sizeof(unsigned long))      return __builtin_clzl(x);
+  if constexpr (sizeof(T) <= sizeof(unsigned long long)) return __builtin_clzll(x);
+  static_assert(sizeof(T) <= sizeof(unsigned long long), "clz only works with types up to 64 bits");
+}
+#pragma endregion
+
+
+
+
 #pragma region POW2
 /**
  * Check if a value is a power of 2.
@@ -70,7 +91,7 @@ inline int sgn(T x) {
  * @returns true if x is a power of 2
  */
 template <class T>
-constexpr bool isPow2(T x) noexcept {
+inline constexpr bool isPow2(T x) noexcept {
   return !(x & (x-1));
 }
 
@@ -81,7 +102,7 @@ constexpr bool isPow2(T x) noexcept {
  * @returns previous power of 2 of x
  */
 template <class T>
-constexpr T prevPow2(T x) noexcept {
+inline constexpr T prevPow2(T x) noexcept {
   return 1 << T(log2(x));
 }
 
@@ -92,7 +113,8 @@ constexpr T prevPow2(T x) noexcept {
  * @returns next power of 2 of x
  */
 template <class T>
-constexpr T nextPow2(T x) noexcept {
+inline constexpr T nextPow2(T x) noexcept {
+  if (is_integral_v<T>) return T(1) << (8*sizeof(T) - countLeadingZeros(x));
   return 1 << T(ceil(log2(x)));
 }
 #pragma endregion

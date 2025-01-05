@@ -163,4 +163,46 @@ inline G duplicateOmp(const G& x) {
 }
 #endif
 #pragma endregion
+
+
+
+template <class H, class G>
+inline void duplicateArenaOmpW(H& a, const G& x) {
+  using  K = typename G::key_type;
+  size_t S = x.span();
+  // Delete existing data.
+  a.clear();
+  // Add vertices and reserve space for edges.
+  auto t0 = timeNow();
+  a.reserve(S);
+  auto t1 = timeNow();
+  #pragma omp parallel for schedule(static, 2048)
+  for (K u=0; u<S; ++u) {
+    if (!x.hasVertex(u)) continue;
+    a.addVertex(u, x.vertexValue(u));
+  }
+  auto t2 = timeNow();
+  #pragma omp parallel for schedule(dynamic, 2048)
+  for (K u=0; u<S; ++u) {
+    if (!x.hasVertex(u)) continue;
+    a.allocateEdges(u, x.degree(u));
+  }
+  auto t3 = timeNow();
+  // Populate the edges.
+  #pragma omp parallel for schedule(dynamic, 2048)
+  for (K u=0; u<S; ++u) {
+    if (!x.hasVertex(u)) continue;
+    x.forEachEdge(u, [&](auto v, auto w) {
+      a.addEdgeUnchecked(u, v, w);
+    });
+  }
+  auto t4 = timeNow();
+  a.updateOmp(true, true);
+  auto t5 = timeNow();
+  printf("duplicateArenaOmpW: Reserve space = %.3f ms\n", duration(t0, t1));
+  printf("duplicateArenaOmpW: Add vertices  = %.3f ms\n", duration(t1, t2));
+  printf("duplicateArenaOmpW: Reserve edges = %.3f ms\n", duration(t2, t3));
+  printf("duplicateArenaOmpW: Add edges     = %.3f ms\n", duration(t3, t4));
+  printf("duplicateArenaOmpW: Update        = %.3f ms\n", duration(t4, t5));
+}
 #pragma endregion

@@ -4,6 +4,16 @@
 
 
 
+#pragma region CONSTANTS
+#ifndef MAX_THREADS
+/** Maximum number of threads. */
+#define MAX_THREADS 128
+#endif
+#pragma endregion
+
+
+
+
 #pragma region BELONGS
 /**
  * Check if work belongs to current thread.
