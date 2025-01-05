@@ -62,13 +62,21 @@ inline void duplicateIfOmpW(H& a, const G& x, FV fv, FE fe) {
   // Delete existing data.
   a.clear();
   // Add vertices and reserve space for edges.
+  auto t0 = timeNow();
   a.reserve(S);
-  #pragma omp parallel for schedule(dynamic, 2048)
+  auto t1 = timeNow();
+  #pragma omp parallel for schedule(static, 2048)
   for (K u=0; u<S; ++u) {
     if (!x.hasVertex(u)) continue;
     a.addVertex(u, x.vertexValue(u));
+  }
+  auto t2 = timeNow();
+  #pragma omp parallel for schedule(dynamic, 2048)
+  for (K u=0; u<S; ++u) {
+    if (!x.hasVertex(u)) continue;
     a.reserveEdges(u, x.degree(u));
   }
+  auto t3 = timeNow();
   // Populate the edges.
   #pragma omp parallel for schedule(dynamic, 2048)
   for (K u=0; u<S; ++u) {
@@ -77,7 +85,14 @@ inline void duplicateIfOmpW(H& a, const G& x, FV fv, FE fe) {
       if (fe(u, v, w)) a.addEdge(u, v, w);
     });
   }
+  auto t4 = timeNow();
   updateOmpU(a);
+  auto t5 = timeNow();
+  printf("duplicateIfOmpW: Reserve space = %.3f ms\n", duration(t0, t1));
+  printf("duplicateIfOmpW: Add vertices  = %.3f ms\n", duration(t1, t2));
+  printf("duplicateIfOmpW: Reserve edges = %.3f ms\n", duration(t2, t3));
+  printf("duplicateIfOmpW: Add edges     = %.3f ms\n", duration(t3, t4));
+  printf("duplicateIfOmpW: Update        = %.3f ms\n", duration(t4, t5));
 }
 
 /**
