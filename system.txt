@@ -1,7 +1,7 @@
 Dell PowerEdge R740xd Rack Mount Chassis
 Proc:  Intel(R) Xeon(R) Gold 6226R CPU @ 2.90GHz (16 cores x 2)
 Cache: L1d+i: 1MB, L2: 16MB, L3: 22MB (shared), NUMA: 2
-Mem:   376GB System memory
+Mem:   512GB System memory
 Disk:  MegaRAID SAS-3 3108 [Invader]
 Net:   Broadcom NetXtreme-E BCM5720 2-port 10G Gigabit Ethernet PCIe
 Infib: Mellanox Technologies MT27800 Family [ConnectX-5]

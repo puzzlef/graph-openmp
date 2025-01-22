@@ -8,9 +8,10 @@
 #SBATCH --output=slurm.out
 # source scl_source enable gcc-toolset-11
 # module load hpcx-2.7.0/hpcx-ompi
-# module load openmpi/4.1.5src="graph-openmp"
+# module load openmpi/4.1.5
+# module load cuda/12.3
 src="graph-openmp"
-out="$HOME/Logs/$src.log"
+out="$HOME/Logs/$src$1.log"
 ulimit -s unlimited
 printf "" > "$out"
 
@@ -18,8 +19,8 @@ printf "" > "$out"
 if [[ "$DOWNLOAD" != "0" ]]; then
   rm -rf $src
   git clone https://github.com/puzzlef/$src
+  cd $src
 fi
-cd $src
 
 # Fixed config
 : "${TYPE:=float}"
@@ -35,7 +36,7 @@ DEFINES=(""
 )
 
 # Compile
-g++ ${DEFINES[*]} -std=c++17 -march=native -O3 -fopenmp main.cxx
+g++ ${DEFINES[*]} -std=c++17 -march=native -O3 -fopenmp main.cxx  # -Wall -Wno-unknown-pragmas
 
 # Run on all graphs
 runAll() {
