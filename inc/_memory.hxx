@@ -9,6 +9,7 @@
 
 using std::vector;
 using std::min;
+using std::max;
 
 
 
@@ -458,4 +459,102 @@ template <class T, size_t ALIGN=PAGE_SIZE>
 inline constexpr size_t bytesof(size_t N) {
   return ((N * sizeof(T) + ALIGN-1) / ALIGN) * ALIGN;
 }
+
+
+/**
+ * Allocate default-initialized memory.
+ * @param NUM number of elements to allocate
+ * @param RES number of elements to reserve [0]
+ * @param def default value [0]
+ * @returns pointer to allocated memory
+ */
+template <class T>
+inline T* allocateValues(size_t NUM, size_t RES=0, const T& def=T()) {
+  size_t L = max(NUM, RES);
+  T   *ptr = new T[L];
+  for (size_t i=0; i<NUM; ++i)
+    ptr[i] = def;
+  return ptr;
+}
+
+
+#ifdef OPENMP
+/**
+ * Allocate default-initialized memory [parallel].
+ * @param NUM number of elements to allocate
+ * @param RES number of elements to reserve [0]
+ * @param def default value [0]
+ * @returns pointer to allocated memory
+ */
+template <class T>
+inline T* allocateValuesOmp(size_t NUM, size_t RES=0, const T& def=T()) {
+  size_t L = max(NUM, RES);
+  T   *ptr = new T[L];
+  #pragma omp parallel for schedule(auto)
+  for (size_t i=0; i<NUM; ++i)
+    ptr[i] = def;
+  return ptr;
+}
+#endif
+
+
+/**
+ * Reallocate memory.
+ * @param ptr pointer to memory to reallocate
+ * @param NUM0 old number of elements
+ * @param RES0 old number of reserved elements
+ * @param NUM1 new number of elements
+ * @param RES1 new number of reserved elements
+ * @param def default value [0]
+ * @returns pointer to reallocated memory
+ */
+template <class T>
+inline T* reallocateValues(T *ptr, size_t NUM0, size_t RES0, size_t NUM1, size_t RES1, const T& def=T()) {
+  if (RES1==RES0) {
+    for (size_t i=NUM0; i<NUM1; ++i)
+      ptr[i] = def;
+    return ptr;
+  }
+  T   *tmp = new T[RES1];
+  size_t M = min(NUM0, NUM1);
+  for (size_t i=0; i<M; ++i)
+    tmp[i] = ptr[i];
+  for (size_t i=M; i<NUM1; ++i)
+    tmp[i] = def;
+  delete[] ptr;
+  return tmp;
+}
+
+
+#ifdef OPENMP
+/**
+ * Reallocate memory [parallel].
+ * @param ptr pointer to memory to reallocate
+ * @param NUM0 old number of elements
+ * @param RES0 old number of reserved elements
+ * @param NUM1 new number of elements
+ * @param RES1 new number of reserved elements
+ * @param def default value [0]
+ * @returns pointer to reallocated memory
+ */
+template <class T>
+inline T* reallocateValuesOmp(T *ptr, size_t NUM0, size_t RES0, size_t NUM1, size_t RES1, const T& def=T()) {
+  if (RES1==RES0) {
+    #pragma omp parallel for schedule(auto)
+    for (size_t i=NUM0; i<NUM1; ++i)
+      ptr[i] = def;
+    return ptr;
+  }
+  T   *tmp = new T[RES1];
+  size_t M = min(NUM0, NUM1);
+  #pragma omp parallel for schedule(auto)
+  for (size_t i=0; i<M; ++i)
+    tmp[i] = ptr[i];
+  #pragma omp parallel for schedule(auto)
+  for (size_t i=M; i<NUM1; ++i)
+    tmp[i] = def;
+  delete[] ptr;
+  return tmp;
+}
+#endif
 #pragma endregion

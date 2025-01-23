@@ -174,7 +174,7 @@ inline void duplicateArenaOmpW(H& a, const G& x) {
   a.clear();
   // Add vertices and reserve space for edges.
   auto t0 = timeNow();
-  a.reserve(S);
+  a.reserveOmp(S);
   auto t1 = timeNow();
   #pragma omp parallel for schedule(static, 2048)
   for (K u=0; u<S; ++u) {

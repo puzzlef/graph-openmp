@@ -30,6 +30,47 @@ using vector2d = vector<vector<T>>;
 
 
 #pragma region METHODS
+#pragma region GET BOOL
+/**
+ * Get i-th bit from an array of bits.
+ * @param x bit array
+ * @param i bit index
+ * @returns bit value
+ */
+template <class T>
+inline bool getBit(const T *x, size_t i) {
+  constexpr size_t WORD = 8 * sizeof(T);
+  return x[i / WORD] & (1 << (i % WORD));
+}
+
+
+/**
+ * Set i-th bit in an array of bits.
+ * @param x bit array
+ * @param i bit index
+ */
+template <class T>
+inline void setBit(T *x, size_t i) {
+  constexpr size_t WORD = 8 * sizeof(T);
+  x[i / WORD] |= (1 << (i % WORD));
+}
+
+
+/**
+ * Clear i-th bit in an array of bits.
+ * @param x bit array
+ * @param i bit index
+ */
+template <class T>
+inline void clearBit(T *x, size_t i) {
+  constexpr size_t WORD = 8 * sizeof(T);
+  x[i / WORD] &= ~(1 << (i % WORD));
+}
+#pragma endregion
+
+
+
+
 #pragma region GATHER VALUES
 /**
  * Gather values at specified indices of an array into another array.

@@ -38,6 +38,7 @@ class ArenaDiGraph {
   protected:
   /** Memory allocator for the graph. */
   using Allocator = ConcurrentPow2Allocator<>;
+  using bool_type = uint64_t;
   public:
   /** Key type (vertex id). */
   using key_type = K;
@@ -59,22 +60,26 @@ class ArenaDiGraph {
 
   #pragma region DATA
   protected:
+  /** Outgoing edges for each vertex (including edge weights). */
+  pair<K, E> **edges;
+  /** Out-degree of each vertex. */
+  K *degrees;
+  /** Edge capacity of each vertex. */
+  K *capacities;
+  /** Vertex values. */
+  V *values;
+  /** Vertex existence flags. */
+  bool_type *exists;
+  /** Memory allocator. */
+  Allocator *mx;
+  /** Span of the graph. */
+  size_t SPAN = 0;
   /** Number of vertices. */
   size_t N = 0;
   /** Number of edges. */
   size_t M = 0;
-  /** Vertex existence flags. */
-  vector<bool> exists;
-  /** Vertex values. */
-  vector<V> values;
-  /** Out-degree of each vertex. */
-  vector<K> degrees;
-  /** Edge capacity of each vertex. */
-  vector<K> capacities;
-  /** Outgoing edges for each vertex (including edge weights). */
-  vector<pair<K, E>*> edges;
-  /** Memory allocator. */
-  Allocator *mx;
+  /** Memory reserved for vertices. */
+  size_t RESV = 0;
   #pragma endregion
 
 
@@ -87,7 +92,7 @@ class ArenaDiGraph {
    * @returns size of buffer required
    */
   inline size_t span() const noexcept {
-    return exists.size();
+    return SPAN;
   }
 
   /**
@@ -133,7 +138,7 @@ class ArenaDiGraph {
   template <class FP>
   inline void forEachVertex(FP fp) const noexcept {
     for (K u=0; u<span(); ++u)
-      if (exists[u]) fp(u, values[u]);
+      if (getBit(exists, u)) fp(u, values[u]);
   }
 
   /**
@@ -143,7 +148,7 @@ class ArenaDiGraph {
   template <class FP>
   inline void forEachVertexKey(FP fp) const noexcept {
     for (K u=0; u<span(); ++u)
-      if (exists[u]) fp(u);
+      if (getBit(exists, u)) fp(u);
   }
 
   /**
@@ -244,7 +249,7 @@ class ArenaDiGraph {
    * @returns does the vertex exist?
    */
   inline bool hasVertex(K u) const noexcept {
-    return u < span() && exists[u];
+    return u < span() && getBit(exists, u);
   }
 
   /**
@@ -369,15 +374,70 @@ class ArenaDiGraph {
 
 
   /**
+   * Clear all arrays in the graph.
+   * @note The edges are not cleared!
+   */
+  inline void clearArrays() {
+    // Free allocated memory.
+    if (RESV > 0) {
+      delete[] edges;
+      delete[] degrees;
+      delete[] capacities;
+      delete[] values;
+      delete[] exists;
+    }
+    edges      = nullptr;
+    degrees    = nullptr;
+    capacities = nullptr;
+    values     = nullptr;
+    exists     = nullptr;
+    // Reset span and reserved vertex count.
+    SPAN = 0;
+    RESV = 0;
+  }
+
+
+  /**
    * Resize arrays to specified size.
    * @param n new size
+   * @note The edges are not cleared!
    */
   inline void resizeArrays(size_t n) {
-    exists.resize(n);
-    values.resize(n);
-    degrees.resize(n);
-    capacities.resize(n);
-    edges.resize(n);
+    constexpr size_t B = 8 * sizeof(bool_type);
+    // Compute new reserved size (round up to page size).
+    size_t resv = ceilDiv(n, size_t(PAGE_SIZE)) * PAGE_SIZE;
+    if (n <= SPAN && resv == RESV) return;
+    // Allocate new memory.
+    edges      = reallocateValues(edges, SPAN, RESV, n, resv);
+    degrees    = reallocateValues(degrees, SPAN, RESV, n, resv);
+    capacities = reallocateValues(capacities, SPAN, RESV, n, resv);
+    values     = reallocateValues(values, SPAN, RESV, n, resv);
+    exists     = reallocateValues(exists, ceilDiv(SPAN, B), ceilDiv(RESV, B), ceilDiv(n, B), ceilDiv(resv, B));
+    // Update span and reserved size.
+    SPAN = n;
+    RESV = resv;
+  }
+
+
+  /**
+   * Resize arrays to specified size [parallel].
+   * @param n new size
+   * @note The edges are not cleared!
+   */
+  inline void resizeArraysOmp(size_t n) {
+    constexpr size_t B = 8 * sizeof(bool_type);
+    // Compute new reserved size (round up to page size).
+    size_t resv = ceilDiv(n, size_t(PAGE_SIZE)) * PAGE_SIZE;
+    if (n <= SPAN && resv == RESV) return;
+    // Allocate new memory.
+    edges      = reallocateValuesOmp(edges, SPAN, RESV, n, resv);
+    degrees    = reallocateValuesOmp(degrees, SPAN, RESV, n, resv);
+    capacities = reallocateValuesOmp(capacities, SPAN, RESV, n, resv);
+    values     = reallocateValuesOmp(values, SPAN, RESV, n, resv);
+    exists     = reallocateValuesOmp(exists, ceilDiv(SPAN, B), ceilDiv(RESV, B), ceilDiv(n, B), ceilDiv(resv, B));
+    // Update span and reserved size.
+    SPAN = n;
+    RESV = resv;
   }
 
 
@@ -408,20 +468,6 @@ class ArenaDiGraph {
 
   public:
   /**
-   * Remove all vertices and edges from the graph.
-   */
-  inline void clear() noexcept {
-    N = 0; M = 0;
-    exists.clear();
-    values.clear();
-    degrees.clear();
-    capacities.clear();
-    edges.clear();
-    resetAllocators();
-  }
-
-
-  /**
    * Clear the outgoing edges of a vertex in the graph.
    * @param u source vertex id
    */
@@ -431,6 +477,37 @@ class ArenaDiGraph {
     edges[u] = nullptr;
     degrees[u] = 0;
     capacities[u] = 0;
+  }
+
+
+  /**
+   * Remove all vertices and edges from the graph.
+   */
+  inline void clear() noexcept {
+    size_t S = span();
+    // Clear all edges first.
+    for (K u=0; u<S; ++u)
+      clearEdges(u);
+    // Now clear all the rest.
+    clearArrays();
+    resetAllocators();
+    N = 0; M = 0;
+  }
+
+
+  /**
+   * Remove all vertices and edges from the graph [parallel].
+   */
+  inline void clearOmp() noexcept {
+    size_t S = span();
+    // Clear all edges first.
+    #pragma omp parallel for schedule(dynamic, 2048)
+    for (K u=0; u<S; ++u)
+      clearEdges(u);
+    // Now clear all the rest.
+    clearArrays();
+    resetAllocators();
+    N = 0; M = 0;
   }
 
 
@@ -497,7 +574,7 @@ class ArenaDiGraph {
    */
   inline void reserveOmp(size_t n, size_t deg=0) {
     size_t S = max(n, span());
-    resizeArrays(S);
+    resizeArraysOmp(S);
     if (deg==0) return;
     #pragma omp parallel for schedule(dynamic, 2048)
     for (K u=0; u<S; ++u)
@@ -513,7 +590,7 @@ class ArenaDiGraph {
     size_t  S = span();
     size_t dN = 0, dM = 0;
     for (K u=n; u<S; ++u) {
-      if (!exists[u]) continue;
+      if (!getBit(exists, u)) continue;
       ++dN; dM += degrees[u];
       clearEdges(u);
     }
@@ -531,12 +608,12 @@ class ArenaDiGraph {
     size_t dN = 0, dM = 0;
     #pragma omp parallel for schedule(dynamic, 2048) reduction(+:dN,dM)
     for (K u=n; u<S; ++u) {
-      if (!exists[u]) continue;
+      if (!getBit(exists, u)) continue;
       ++dN; dM += degrees[u];
       clearEdges(u);
     }
     N -= dN; M -= dM;
-    resizeArrays(n);
+    resizeArraysOmp(n);
   }
 
 
@@ -546,7 +623,7 @@ class ArenaDiGraph {
   inline void updateCounts() {
     N = 0; M = 0;
     for (K u=0; u < span(); ++u) {
-      if (!exists[u]) continue;
+      if (!getBit(exists, u)) continue;
       ++N; M += degrees[u];
     }
   }
@@ -559,7 +636,7 @@ class ArenaDiGraph {
     N = 0; M = 0;
     #pragma omp parallel for schedule(auto) reduction(+:N,M)
     for (K u=0; u < span(); ++u) {
-      if (!exists[u]) continue;
+      if (!getBit(exists, u)) continue;
       ++N; M += degrees[u];
     }
   }
@@ -610,7 +687,7 @@ class ArenaDiGraph {
    */
   inline void addVertex(K u) {
     if (u >= span()) respan(u+1);
-    exists[u] = true;
+    setBit(exists, u);
   }
 
 
@@ -622,7 +699,7 @@ class ArenaDiGraph {
    */
   inline void addVertex(K u, V d) {
     if (u >= span()) respan(u+1);
-    exists[u] = true;
+    setBit(exists, u);
     values[u] = d;
   }
 
@@ -634,7 +711,7 @@ class ArenaDiGraph {
    */
   inline void removeVertex(K u) {
     if (!hasVertex(u)) return;
-    exists[u] = false;
+    clearBit(exists, u);
     values[u] = V();
     clearEdges(u);
   }
