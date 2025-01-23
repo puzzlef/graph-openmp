@@ -23,7 +23,7 @@ using std::min;
 /** Minimum number of memory pools expected. */
 #define MIN_POOLS 16
 /** Capacity of the power-of-two memory pool, in bytes. */
-#define POW2_POOL_SIZE 65536
+#define POW2_POOL_SIZE 512*1024
 #pragma endregion
 
 
@@ -246,10 +246,14 @@ class Pow2Allocator {
   ArenaAllocator<256, CAPACITY/256> a256;
   /** Arena allocator for 512-byte allocations. */
   ArenaAllocator<512, CAPACITY/512> a512;
-  /** Arena allocator for 1024-byte allocations. */
+  /** Arena allocator for 1KB allocations. */
   ArenaAllocator<1024, CAPACITY/1024> a1024;
-  /** Arena allocator for 2048-byte allocations. */
+  /** Arena allocator for 2KB allocations. */
   ArenaAllocator<2048, CAPACITY/2048> a2048;
+  /** Arena allocator for 4KB allocations. */
+  ArenaAllocator<4096, CAPACITY/4096> a4096;
+  /** Arena allocator for 8KB allocations. */
+  ArenaAllocator<8192, CAPACITY/8192> a8192;
   #pragma endregion
 
 
@@ -262,7 +266,7 @@ class Pow2Allocator {
    */
   static inline size_t allocationCapacity(size_t n) noexcept {
     if (n <= 16) return 16;
-    if (n <= PAGE_SIZE) return nextPow2(n);
+    if (n <  8192) return nextPow2(n);
     return ceilDiv(n, size_t(PAGE_SIZE)) * PAGE_SIZE;
   }
 
@@ -282,6 +286,8 @@ class Pow2Allocator {
       case 512:  return a512.allocate();
       case 1024: return a1024.allocate();
       case 2048: return a2048.allocate();
+      case 4096: return a4096.allocate();
+      case 8192: return a8192.allocate();
       default:   return new char[n];
     }
   }
@@ -302,6 +308,8 @@ class Pow2Allocator {
       case 512:  a512.deallocate(ptr); break;
       case 1024: a1024.deallocate(ptr); break;
       case 2048: a2048.deallocate(ptr); break;
+      case 4096: a4096.deallocate(ptr); break;
+      case 8192: a8192.deallocate(ptr); break;
       default:   delete[] (char*) ptr;
     }
   }
@@ -319,6 +327,8 @@ class Pow2Allocator {
     a512.reset();
     a1024.reset();
     a2048.reset();
+    a4096.reset();
+    a8192.reset();
   }
   #pragma endregion
 
