@@ -197,7 +197,7 @@ inline void duplicateArenaOmpW(H& a, const G& x) {
     });
   }
   auto t4 = timeNow();
-  a.updateOmp(true, true);
+  a.updateOmp(true, false);
   auto t5 = timeNow();
   printf("duplicateArenaOmpW: Reserve space = %.3f ms\n", duration(t0, t1));
   printf("duplicateArenaOmpW: Add vertices  = %.3f ms\n", duration(t1, t2));
