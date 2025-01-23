@@ -2,9 +2,15 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const RGRAPH = /^Reading edgelist in file .*\/(.*?)\.mtx \.\.\./m;
-const RORDER = /^rows=(.+?), cols=(.+?), edges=(.+)/m;
-const RRESLT = /^\{(.+?)ms, size=(.+?)\} (.+)/m;
+const ROMPTH = /^OMP_NUM_THREADS=(\d+)/m;
+const RGRAPH = /^Loading graph .*\/(.*?)\.mtx \.\.\./m;
+const RORDER = /^order: (\d+) size: (\d+) \[directed\] \{\}/m;
+const RRESLT = /^\{(.+?)ms\} (\w+)/m;
+const RRESRV = /^\w+: Reserve space\s*=\s*(.+?) ms/m;
+const RADDVT = /^\w+: Add vertices\s*=\s*(.+?) ms/m;
+const RRSEDG = /^\w+: Reserve edges\s*=\s*(.+?) ms/m;
+const RADDED = /^\w+: Add edges\s*=\s*(.+?) ms/m;
+const RUPDAT = /^\w+: Update\s*=\s*(.+?) ms/m;
 
 
 
@@ -44,20 +50,52 @@ function writeCsv(pth, rows) {
 
 function readLogLine(ln, data, state) {
   ln = ln.replace(/^\d+-\d+-\d+ \d+:\d+:\d+\s+/, '');
-  if (RGRAPH.test(ln)) {
+  if (ROMPTH.test(ln)) {
+    var [, omp_num_threads] = ROMPTH.exec(ln);
+    state.omp_num_threads   = parseFloat(omp_num_threads);
+  }
+  else if (RGRAPH.test(ln)) {
     var [, graph] = RGRAPH.exec(ln);
     if (!data.has(graph)) data.set(graph, []);
-    state = {graph};
+    state.graph = graph;
+    state.order = 0;
+    state.size  = 0;
+    state.reserve_space_time = 0;
+    state.add_vertices_time  = 0;
+    state.reserve_edges_time = 0;
+    state.add_edges_time     = 0;
+    state.update_time        = 0;
   }
   else if (RORDER.test(ln)) {
-    var [, rows, cols, edges] = RORDER.exec(ln);
-    state.order = rows;
-    state.size  = edges;
+    var [, order, size] = RORDER.exec(ln);
+    state.order = parseFloat(order);
+    state.size  = parseFloat(size);
+  }
+  else if (RRESRV.test(ln)) {
+    var [, reserve_space_time] = RRESRV.exec(ln);
+    state.reserve_space_time   = parseFloat(reserve_space_time);
+  }
+  else if (RADDVT.test(ln)) {
+    var [, add_vertices_time] = RADDVT.exec(ln);
+    state.add_vertices_time   = parseFloat(add_vertices_time);
+  }
+  else if (RRSEDG.test(ln)) {
+    var [, reserve_edges_time] = RRSEDG.exec(ln);
+    state.reserve_edges_time   = parseFloat(reserve_edges_time);
+  }
+  else if (RADDED.test(ln)) {
+    var [, add_edges_time] = RADDED.exec(ln);
+    state.add_edges_time   = parseFloat(add_edges_time);
+  }
+  else if (RUPDAT.test(ln)) {
+    var [, update_time] = RUPDAT.exec(ln);
+    state.update_time   = parseFloat(update_time);
   }
   else if (RRESLT.test(ln)) {
-    var [, total_time, size] = RRESLT.exec(ln);
+    var [, time, technique] = RRESLT.exec(ln);
     data.get(state.graph).push(Object.assign({}, state, {
-      total_time: parseFloat(total_time),
+      time: parseFloat(time),
+      technique,
     }));
   }
   return state;
@@ -67,7 +105,7 @@ function readLog(pth) {
   var text  = readFile(pth);
   var lines = text.split('\n');
   var data  = new Map();
-  var state = null;
+  var state = {};
   for (var ln of lines)
     state = readLogLine(ln, data, state);
   return data;
