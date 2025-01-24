@@ -2,6 +2,7 @@
 #include <cstring>
 #include <utility>
 #include <iterator>
+#include <memory>
 #include <vector>
 #include <ostream>
 #include <algorithm>
@@ -11,8 +12,10 @@
 #endif
 
 using std::pair;
+using std::shared_ptr;
 using std::vector;
 using std::ostream;
+using std::make_shared;
 using std::memcpy;
 using std::distance;
 using std::max;
@@ -36,8 +39,7 @@ template <class K=uint32_t, class V=None, class E=None>
 class ArenaDiGraph {
   #pragma region TYPES
   protected:
-  /** Memory allocator for the graph. */
-  using Allocator = ConcurrentPow2Allocator<>;
+  /** Type for storing boolean flags. */
   using bool_type = uint64_t;
   public:
   /** Key type (vertex id). */
@@ -46,6 +48,10 @@ class ArenaDiGraph {
   using vertex_value_type = V;
   /** Edge value type (edge weight). */
   using edge_value_type = E;
+  /** Offset type (edge offset). */
+  using offset_type = size_t;
+  /** Memory allocator type. */
+  using allocator_type = ConcurrentPow2Allocator<>;
   #pragma endregion
 
 
@@ -60,20 +66,20 @@ class ArenaDiGraph {
 
   #pragma region DATA
   protected:
-  /** Outgoing edges for each vertex (including edge weights). */
-  pair<K, E> **edges;
-  /** Out-degree of each vertex. */
-  K *degrees;
-  /** Edge capacity of each vertex. */
-  K *capacities;
-  /** Vertex values. */
-  V *values;
   /** Vertex existence flags. */
-  bool_type *exists;
+  bool_type *exists = nullptr;
+  /** Outgoing edges for each vertex (including edge weights). */
+  pair<K, E> **edges = nullptr;
+  /** Out-degree of each vertex. */
+  K *degrees = nullptr;
+  /** Edge capacity of each vertex. */
+  K *capacities = nullptr;
   /** Memory allocator. */
-  Allocator *mx;
+  shared_ptr<allocator_type> mx;
   /** Span of the graph. */
   size_t SPAN = 0;
+  /** Vertex values. */
+  V *values = nullptr;
   /** Number of vertices. */
   size_t N = 0;
   /** Number of edges. */
@@ -324,11 +330,21 @@ class ArenaDiGraph {
    * @returns success?
    */
   inline bool setEdgeValue(K u, K v, E w) noexcept {
-    if (!hasVertex(u) || !hasVertex(v)) return false;
+    if (u >= span()) return false;
     auto ib = edges[u], ie = edges[u] + degrees[u];
     auto it = findEntry(ib, ie, v);
     if (it == ie) return false;
     (*it).second = w;
+    return true;
+  }
+
+
+  /**
+   * Get the memory allocator in use.
+   * @returns memory allocator
+   */
+  inline shared_ptr<allocator_type> allocator() const noexcept {
+    return mx;
   }
   #pragma endregion
 
@@ -340,8 +356,16 @@ class ArenaDiGraph {
    * @param n number of elements
    * @returns allocation capacity
    */
-  static inline constexpr K allocationCapacity(K n) noexcept {
-    return Allocator::allocationCapacity(n*EDGE) / EDGE;
+  static inline constexpr K allocationCapacity(size_t n) noexcept {
+    return allocator_type::allocationCapacity(n*EDGE) / EDGE;
+  }
+
+
+  /**
+   * Setup the memory allocator, if not already set.
+   */
+  inline void setupAllocator() {
+    if (!mx) mx = make_shared<allocator_type>();
   }
 
 
@@ -362,38 +386,6 @@ class ArenaDiGraph {
    */
   inline void deallocate(void *ptr, K c) {
     mx->deallocate(ptr, c*EDGE);
-  }
-
-
-  /**
-   * Reset all arena allocators.
-   */
-  inline void resetAllocators() {
-    mx->reset();
-  }
-
-
-  /**
-   * Clear all arrays in the graph.
-   * @note The edges are not cleared!
-   */
-  inline void clearArrays() {
-    // Free allocated memory.
-    if (RESV > 0) {
-      delete[] edges;
-      delete[] degrees;
-      delete[] capacities;
-      delete[] values;
-      delete[] exists;
-    }
-    edges      = nullptr;
-    degrees    = nullptr;
-    capacities = nullptr;
-    values     = nullptr;
-    exists     = nullptr;
-    // Reset span and reserved vertex count.
-    SPAN = 0;
-    RESV = 0;
   }
 
 
@@ -483,31 +475,35 @@ class ArenaDiGraph {
   /**
    * Remove all vertices and edges from the graph.
    */
-  inline void clear() noexcept {
-    size_t S = span();
-    // Clear all edges first.
-    for (K u=0; u<S; ++u)
-      clearEdges(u);
-    // Now clear all the rest.
-    clearArrays();
-    resetAllocators();
-    N = 0; M = 0;
+  inline void clear() {
+    if (mx == nullptr) return;
+    // Clear all edges first, if the allocator is shared.
+    bool isShared = mx.use_count() > 1;
+    if (!isShared)  mx->reset();
+    else {
+      for (K u=0; u<SPAN; ++u)
+        clearEdges(u);
+    }
+    // Update counts.
+    SPAN = 0; N = 0; M = 0;
   }
 
 
   /**
    * Remove all vertices and edges from the graph [parallel].
    */
-  inline void clearOmp() noexcept {
-    size_t S = span();
-    // Clear all edges first.
-    #pragma omp parallel for schedule(dynamic, 2048)
-    for (K u=0; u<S; ++u)
-      clearEdges(u);
-    // Now clear all the rest.
-    clearArrays();
-    resetAllocators();
-    N = 0; M = 0;
+  inline void clearOmp() {
+    if (mx == nullptr) return;
+    // Clear all edges first, if the allocator is shared.
+    bool isShared = mx.use_count() > 1;
+    if (!isShared)  mx->reset();
+    else {
+      #pragma omp parallel for schedule(dynamic, 2048)
+      for (K u=0; u<SPAN; ++u)
+        clearEdges(u);
+    }
+    // Update counts.
+    SPAN = 0; N = 0; M = 0;
   }
 
 
@@ -559,6 +555,7 @@ class ArenaDiGraph {
    * @param deg expected average degree of vertices
    */
   inline void reserve(size_t n, size_t deg=0) {
+    setupAllocator();
     size_t S = max(n, span());
     resizeArrays(S);
     if (deg==0) return;
@@ -573,6 +570,7 @@ class ArenaDiGraph {
    * @param deg expected average degree of vertices
    */
   inline void reserveOmp(size_t n, size_t deg=0) {
+    setupAllocator();
     size_t S = max(n, span());
     resizeArraysOmp(S);
     if (deg==0) return;
@@ -587,6 +585,7 @@ class ArenaDiGraph {
    * @param n new span
    */
   inline void respan(size_t n) {
+    setupAllocator();
     size_t  S = span();
     size_t dN = 0, dM = 0;
     for (K u=n; u<S; ++u) {
@@ -604,6 +603,7 @@ class ArenaDiGraph {
    * @param n new span
    */
   inline void respanOmp(size_t n) {
+    setupAllocator();
     size_t S = span();
     size_t dN = 0, dM = 0;
     #pragma omp parallel for schedule(dynamic, 2048) reduction(+:dN,dM)
@@ -784,6 +784,15 @@ class ArenaDiGraph {
     auto it = set_union(eb, ee, ib, ie, (pair<K, E>*) ptr, fl);
     degrees[u] = it - eb;
   }
+
+
+  /**
+   * Set the memory allocator in use.
+   * @param alloc memory allocator
+   */
+  inline void setAllocator(shared_ptr<allocator_type> alloc) {
+    mx = alloc;
+  }
   #pragma endregion
 
 
@@ -792,16 +801,20 @@ class ArenaDiGraph {
   /**
    * Create an empty graph.
    */
-  ArenaDiGraph() {
-    mx = new Allocator();
-  }
+  ArenaDiGraph() {}
 
 
   /**
    * Destroy the Arena DiGraph.
    */
   ~ArenaDiGraph() {
-    delete mx;
+    clear();
+    delete[] exists;
+    delete[] edges;
+    delete[] degrees;
+    delete[] capacities;
+    delete[] values;
+    mx = nullptr;
   }
   #pragma endregion
   #pragma endregion
