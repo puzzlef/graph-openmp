@@ -668,8 +668,10 @@ class ArenaDiGraph {
   inline void updateOmp(bool isUnique=false, bool isSorted=false) {
     if (!isSorted) {
       #pragma omp parallel for schedule(dynamic, 2048)
-      for (K u=0; u < span(); ++u)
+      for (K u=0; u < span(); ++u) {
+        #pragma omp task if(degree(u) > 2048)
         sortEdges(u);
+      }
     }
     if (!isUnique) {
       #pragma omp parallel for schedule(dynamic, 2048)

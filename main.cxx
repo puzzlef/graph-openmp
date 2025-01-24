@@ -58,12 +58,12 @@ int main(int argc, char **argv) {
     });
     LOG(""); println(xc);
     printf("{%09.1fms} %s\n", tr, "readMtxFormatToCsrOmpW");
-    DiGraph<K, V, E> x;
-    double ts = measureDuration([&]() {
-      duplicateOmpW(x, xc);
-    });
-    LOG(""); println(x);
-    printf("{%09.1fms} %s\n", ts, "duplicateOmpW");
+    // DiGraph<K, V, E> x;
+    // double ts = measureDuration([&]() {
+    //   duplicateOmpW(x, xc);
+    // });
+    // LOG(""); println(x);
+    // printf("{%09.1fms} %s\n", ts, "duplicateOmpW");
 
     ArenaDiGraph<K, V, E> xa;
     double ta = measureDuration([&]() {
