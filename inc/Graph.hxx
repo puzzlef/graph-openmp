@@ -21,6 +21,7 @@ using std::distance;
 using std::max;
 using std::find_if;
 using std::lower_bound;
+using std::copy;
 using std::sort;
 using std::unique;
 using std::set_union;
@@ -193,8 +194,8 @@ class ArenaDiGraph {
    * @param u vertex id
    * @returns begin iterator of edges
    */
-  inline const pair<K, V>* beginEdges(K u) const noexcept {
-    return edges[u];
+  inline const pair<K, E>* beginEdges(K u) const noexcept {
+    return u < span()? edges[u] : nullptr;
   }
 
 
@@ -203,8 +204,8 @@ class ArenaDiGraph {
    * @param u vertex id
    * @returns end iterator of edges
    */
-  inline const pair<K, V>* endEdges(K u) const noexcept {
-    return edges[u] + degrees[u];
+  inline const pair<K, E>* endEdges(K u) const noexcept {
+    return u < span()? edges[u] + degrees[u] : nullptr;
   }
 
 
@@ -213,8 +214,8 @@ class ArenaDiGraph {
    * @param u vertex id
    * @returns begin iterator of edges
    */
-  inline pair<K, V>* beginEdges(K u) noexcept {
-    return edges[u];
+  inline pair<K, E>* beginEdges(K u) noexcept {
+    return u < span()? edges[u] : nullptr;
   }
 
 
@@ -223,8 +224,8 @@ class ArenaDiGraph {
    * @param u vertex id
    * @returns end iterator of edges
    */
-  inline pair<K, V>* endEdges(K u) noexcept {
-    return edges[u] + degrees[u];
+  inline pair<K, E>* endEdges(K u) noexcept {
+    return u < span()? edges[u] + degrees[u] : nullptr;
   }
   #pragma endregion
 
@@ -375,8 +376,8 @@ class ArenaDiGraph {
    * @param c allocation capacity
    * @returns pointer to the allocated memory
    */
-  inline void* allocate(K c) {
-    return mx->allocate(c*EDGE);
+  inline pair<K, E>* allocate(K c) {
+    return (pair<K, E>*) mx->allocate(c*EDGE);
   }
 
 
@@ -385,7 +386,7 @@ class ArenaDiGraph {
    * @param ptr pointer to the memory
    * @param c allocation capacity
    */
-  inline void deallocate(void *ptr, K c) {
+  inline void deallocate(pair<K, E> *ptr, K c) {
     mx->deallocate(ptr, c*EDGE);
   }
 
@@ -517,7 +518,7 @@ class ArenaDiGraph {
   inline void allocateEdges(K u, K deg) {
     if (u >= span() || edges[u]) return;
     K cap = allocationCapacity(deg);
-    edges[u] = (pair<K, E>*) allocate(cap);
+    edges[u] = allocate(cap);
     capacities[u] = cap;
   }
 
@@ -541,11 +542,11 @@ class ArenaDiGraph {
     K cap = allocationCapacity(deg);
     if (cap == capacities[u]) return;
     // Allocate new memory and copy old data.
-    void *ptr = allocate(cap);
+    pair<K, E> *ptr = allocate(cap);
     memcpy(ptr, edges[u], degrees[u] * EDGE);
     deallocate(edges[u], capacities[u]);
     // Update pointer and capacities.
-    edges[u] = (pair<K, E>*) ptr;
+    edges[u] = ptr;
     capacities[u] = cap;
   }
 
@@ -721,6 +722,17 @@ class ArenaDiGraph {
 
 
   /**
+   * Set the degree of a vertex in the graph.
+   * @param u vertex id
+   * @param d new degree of the vertex
+   * @note `update()` must be called after all degrees are set.
+   */
+  inline void setDegreeUnchecked(K u, K d) {
+    degrees[u] = d;
+  }
+
+
+  /**
    * Add an outgoing edge to the graph, without "any" checks.
    * @param u source vertex id
    * @param v target vertex id
@@ -752,15 +764,29 @@ class ArenaDiGraph {
    * @param u source vertex id
    * @param ib begin iterator of edge keys to remove
    * @param ie end iterator of edge keys to remove
+   * @param fl comparison function for edge keys
+   * @note [ib, ie) must be sorted and unique.
+   */
+  template <class I, class FL>
+  inline void removeEdges(K u, I ib, I ie, FL fl) {
+    if (!hasVertex(u)) return;
+    auto *eb = edges[u], *ee = edges[u] + degrees[u];
+    auto  it = set_difference(eb, ee, ib, ie, eb, fl);
+    degrees[u] = it - eb;
+  }
+
+
+  /**
+   * Remove outgoing edges from a vertex in the graph.
+   * @param u source vertex id
+   * @param ib begin iterator of edge keys to remove
+   * @param ie end iterator of edge keys to remove
    * @note [ib, ie) must be sorted and unique.
    */
   template <class I>
   inline void removeEdges(K u, I ib, I ie) {
-    if (!hasVertex(u)) return;
-    auto *eb = edges[u], *ee = edges[u] + degrees[u];
-    auto  fl = [](const auto& a, const auto& b) { return a.first <  b; };
-    auto  it = set_difference(eb, ee, ib, ie, fl);
-    degrees[u] = it - eb;
+    auto fl = [](const auto& a, const auto& b) { return a.first <  b; };
+    removeEdges(u, ib, ie, fl);
   }
 
 
@@ -769,19 +795,21 @@ class ArenaDiGraph {
    * @param u source vertex id
    * @param ib begin iterator of edges to add
    * @param ie end iterator of edges to add
-   * @param buf scratch buffer for the update (of size at least 3 + distance(ib, ie))
    * @note [ib, ie) must be sorted and unique.
    */
-  template <class I>
+  template <class I, class FL>
   inline void addEdges(K u, I ib, I ie) {
     if (!hasVertex(u) || ib==ie) return;
     auto *eb = edges[u], *ee = edges[u] + degrees[u];
     size_t deg = degrees[u] + distance(ib, ie);
     size_t cap = allocationCapacity(deg);
-    void  *ptr = allocate(cap);
+    pair<K, E> *ptr = allocate(cap);
     auto fl = [](const auto& a, const auto& b) { return a.first <  b.first; };
-    auto it = set_union(eb, ee, ib, ie, (pair<K, E>*) ptr, fl);
-    degrees[u] = it - eb;
+    auto it = set_union(eb, ee, ib, ie, ptr, fl);
+    deallocate(eb, capacities[u]);
+    edges[u]   = ptr;
+    degrees[u] = it - ptr;
+    capacities[u] = cap;
   }
 
 
@@ -1503,17 +1531,15 @@ class DiGraphCsr {
 /**
  * Subtract a graph's edges from another graph.
  * @param a graph to subtract from (updated)
- * @param x graph to subtract
+ * @param y graph to subtract
  */
 template <class H, class G>
-inline void subtractGraphEdgesU(H& a, const G& x) {
-  using K = typename G::key_type;
-  using E = typename G::edge_value_type;
-  a.forEachVertexKey([&](auto u) {
-    if (!x.hasVertex(u)) return;
-    auto ib = static_transform_iterator(x.beginEdges(u), ConstPairFirst<K, E>());
-    auto ie = static_transform_iterator(x.endEdges(u),   ConstPairFirst<K, E>());
-    a.removeEdges(u, ib, ie);
+inline void subtractGraphEdgesU(H& a, const G& y) {
+  y.forEachVertexKey([&](auto u) {
+    if (!a.hasVertex(u)) return;
+    auto yb = y.beginEdges(u), ye = y.endEdges(u);
+    auto fl = [](const auto& a, const auto& b) { return a.first < b.first; };
+    a.removeEdges(u, yb, ye, fl);
   });
   a.update(true, true);
 }
@@ -1522,42 +1548,132 @@ inline void subtractGraphEdgesU(H& a, const G& x) {
 /**
  * Subtract a graph's edges from another graph [parallel].
  * @param a graph to subtract from (updated)
- * @param x graph to subtract
+ * @param y graph to subtract
  */
 template <class H, class G>
-inline void subtractGraphOmpU(H& a, const G& x) {
-  using  K = typename G::key_type;
-  using  E = typename G::edge_value_type;
-  size_t S = a.span();
+inline void subtractGraphOmpU(H& a, const G& y) {
+  using  K = typename H::key_type;
+  size_t S = y.span();
   #pragma omp parallel for schedule(dynamic, 2048)
   for (K u=0; u<S; ++u) {
-    if (!a.hasVertex(u) || !x.hasVertex(u)) continue;
-    auto ib = static_transform_iterator(x.beginEdges(u), ConstPairFirst<K, E>());
-    auto ie = static_transform_iterator(x.endEdges(u),   ConstPairFirst<K, E>());
-    a.removeEdges(u, ib, ie);
+    if (!y.hasVertex(u) || !a.hasVertex(u)) continue;
+    auto yb = y.beginEdges(u), ye = y.endEdges(u);
+    auto fl = [](const auto& a, const auto& b) { return a.first < b.first; };
+    a.removeEdges(u, yb, ye, fl);
   }
   a.updateOmp(true, true);
 }
 
 
 /**
- * Add a graph's edges to another graph.
- * @param a graph to add to (updated)
- * @param x graph to add
+ * Subtract a graph's edges from another graph.
+ * @param a output graph (output)
+ * @param x graph to subtract from
+ * @param y graph to subtract
  */
-template <class H, class G>
-inline void addGraphU(H& a, const G& x) {
-  using  K = typename G::key_type;
-  using  E = typename G::edge_value_type;
-  size_t A = a.span();
-  size_t X = x.span();
-  size_t S = max(A, X);
-  a.respan(S);
+template <class H, class GX, class GY>
+inline void subtractGraphW(H& a, const GX& x, const GY& y) {
+  size_t S = x.span();
+  a.clear();
+  a.reserve(S);
+  // Add the vertices.
   x.forEachVertex([&](auto u, auto d) {
     a.addVertex(u, d);
-    auto ib = x.beginEdges(u);
-    auto ie = x.endEdges(u);
-    a.addEdges(u, ib, ie);
+  });
+  // Reserve space for the edges.
+  x.forEachVertexKey([&](auto u) {
+    a.allocateEdges(u, x.degree(u));
+  });
+  // Now add edges of vertices that are untouched.
+  x.forEachVertexKey([&](auto u) {
+    if (y.hasVertex(u)) return;
+    auto xb = x.beginEdges(u), xe = x.endEdges(u);
+    auto ab = a.beginEdges(u);
+    auto it = copy(xb, xe, ab);
+    a.setDegreeUnchecked(u, it - ab);
+  });
+  // Now add edges of vertices that are touched.
+  y.forEachVertexKey([&](auto u) {
+    if (!x.hasVertex(u)) return;
+    auto xb = x.beginEdges(u), xe = x.endEdges(u);
+    auto yb = y.beginEdges(u), ye = y.endEdges(u);
+    auto ab = a.beginEdges(u);
+    auto fl = [](const auto& a, const auto& b) { return a.first < b.first; };
+    auto it = set_difference(xb, xe, yb, ye, ab, fl);
+    a.setDegreeUnchecked(u, it - ab);
+  });
+  a.update(true, true);
+}
+
+
+#ifdef OPENMP
+/**
+ * Subtract a graph's edges from another graph [parallel].
+ * @param a output graph (output)
+ * @param x graph to subtract from
+ * @param y graph to subtract
+ */
+template <class H, class GX, class GY>
+inline void subtractGraphOmpW(H& a, const GX& x, const GY& y) {
+  using  K = typename H::key_type;
+  size_t S = x.span();
+  a.clearOmp();
+  a.reserveOmp(S);
+  // Add the vertices.
+  #pragma omp parallel for schedule(static, 2048)
+  for (K u=0; u<S; ++u) {
+    if (!x.hasVertex(u)) continue;
+    a.addVertex(u, x.vertexValue(u));
+  }
+  // Reserve space for the edges.
+  #pragma omp parallel for schedule(dynamic, 2048)
+  for (K u=0; u<S; ++u) {
+    if (!x.hasVertex(u)) continue;
+    a.allocateEdges(u, x.degree(u));
+  }
+  // Now add edges of vertices that are untouched.
+  #pragma omp parallel for schedule(dynamic, 2048)
+  for (K u=0; u<S; ++u) {
+    if (!x.hasVertex(u) || y.hasVertex(u)) continue;
+    auto xb = x.beginEdges(u), xe = x.endEdges(u);
+    auto ab = a.beginEdges(u);
+    auto it = copy(xb, xe, ab);
+    a.setDegreeUnchecked(u, it - ab);
+  }
+  // Now add edges of vertices that are touched.
+  #pragma omp parallel for schedule(dynamic, 2048)
+  for (K u=0; u<S; ++u) {
+    if (!x.hasVertex(u) || !y.hasVertex(u)) continue;
+    auto xb = x.beginEdges(u), xe = x.endEdges(u);
+    auto yb = y.beginEdges(u), ye = y.endEdges(u);
+    auto ab = a.beginEdges(u);
+    auto fl = [](const auto& a, const auto& b) { return a.first < b.first; };
+    auto it = set_difference(xb, xe, yb, ye, ab, fl);
+    a.setDegreeUnchecked(u, it - ab);
+  }
+  a.updateOmp(true, true);
+}
+#endif
+
+
+/**
+ * Add a graph's edges to another graph.
+ * @param a graph to add to (updated)
+ * @param y graph to add
+ */
+template <class H, class G>
+inline void addGraphU(H& a, const G& y) {
+  size_t A = a.span(), Y = y.span();
+  size_t S = max(A, Y);
+  if (S!=A) a.respan(S);
+  // Add new vertices.
+  y.forEachVertex([&](auto u, auto d) {
+    a.addVertex(u, d);
+  });
+  // Add new edges.
+  y.forEachVertex([&](auto u, auto d) {
+    auto yb = y.beginEdges(u), ye = y.endEdges(u);
+    a.addEdges(u, yb, ye);
   });
   a.update(true, true);
 }
@@ -1567,24 +1683,103 @@ inline void addGraphU(H& a, const G& x) {
 /**
  * Add a graph's edges to another graph [parallel].
  * @param a graph to add to (updated)
- * @param x graph to add
+ * @param y graph to add
  */
 template <class H, class G>
-inline void addGraphOmpU(H& a, const G& x) {
-  using  K = typename G::key_type;
-  using  E = typename G::edge_value_type;
-  size_t A = a.span();
-  size_t X = x.span();
-  size_t S = max(A, X);
-  a.respan(S);
+inline void addGraphOmpU(H& a, const G& y) {
+  using  K = typename H::key_type;
+  size_t A = a.span(), Y = y.span();
+  size_t S = max(A, Y);
+  if (S!=A) a.respan(S);
+  // Add new vertices.
+  #pragma omp parallel for schedule(static, 2048)
+  for (K u=0; u<S; ++u) {
+    if (!y.hasVertex(u)) continue;
+    a.addVertex(u, y.vertexValue(u));
+  }
+  // Add new edges.
   #pragma omp parallel for schedule(dynamic, 2048)
-  for (K u=0; u<X; ++u) {
-    int t = omp_get_thread_num();
+  for (K u=0; u<Y; ++u) {
+    if (!y.hasVertex(u)) continue;
+    auto yb = y.beginEdges(u), ye = y.endEdges(u);
+    a.addEdges(u, yb, ye);
+  }
+  a.updateOmp(true, true);
+}
+#endif
+
+
+/**
+ * Add a graph's edges to another graph.
+ * @param a output graph (output)
+ * @param x graph to add from
+ * @param y graph to add
+ */
+template <class H, class GX, class GY>
+inline void addGraphW(H& a, const GX& x, const GY& y) {
+  using  K = typename H::key_type;
+  size_t X = x.span(), Y = y.span();
+  size_t S = max(X, Y);
+  a.clear();
+  a.reserve(S);
+  // Add the vertices.
+  for (K u=0; u<S; ++u) {
+    if (y.hasVertex(u))      a.addVertex(u, y.vertexValue(u));
+    else if (x.hasVertex(u)) a.addVertex(u, x.vertexValue(u));
+  }
+  // Reserve space for the edges.
+  for (K u=0; u<S; ++u)
+    a.allocateEdges(u, x.degree(u) + y.degree(u));
+  // Now add edges of vertices.
+  for (K u=0; u<S; ++u) {
+    if (!x.hasVertex(u) && !y.hasVertex(u)) continue;
+    auto xb = x.beginEdges(u), xe = x.endEdges(u);
+    auto yb = y.beginEdges(u), ye = y.endEdges(u);
+    auto ab = a.beginEdges(u);
+    auto fl = [](const auto& a, const auto& b) { return a.first < b.first; };
+    auto it = set_union(xb, xe, yb, ye, ab, fl);
+    a.setDegreeUnchecked(u, it - ab);
+  }
+  a.update(true, true);
+}
+
+
+#ifdef OPENMP
+/**
+ * Add a graph's edges to another graph [parallel].
+ * @param a output graph (output)
+ * @param x graph to add from
+ * @param y graph to add
+ */
+template <class H, class GX, class GY>
+inline void addGraphOmpW(H& a, const GX& x, const GY& y) {
+  using  K = typename H::key_type;
+  size_t X = x.span(), Y = y.span();
+  size_t S = max(X, Y);
+  a.clearOmp();
+  a.reserveOmp(S);
+  // Add the vertices.
+  #pragma omp parallel for schedule(static, 2048)
+  for (K u=0; u<S; ++u) {
+    if (y.hasVertex(u))      a.addVertex(u, y.vertexValue(u));
+    else if (x.hasVertex(u)) a.addVertex(u, x.vertexValue(u));
+  }
+  // Reserve space for the edges.
+  #pragma omp parallel for schedule(dynamic, 2048)
+  for (K u=0; u<S; ++u) {
     if (!x.hasVertex(u)) continue;
-    a.addVertex(u, x.vertexValue(u));
-    auto ib = x.beginEdges(u);
-    auto ie = x.endEdges(u);
-    a.addEdges(u, ib, ie);
+    a.allocateEdges(u, x.degree(u) + y.degree(u));
+  }
+  // Now add edges of vertices that are touched.
+  #pragma omp parallel for schedule(dynamic, 2048)
+  for (K u=0; u<S; ++u) {
+    if (!x.hasVertex(u) && !y.hasVertex(u)) continue;
+    auto xb = x.beginEdges(u), xe = x.endEdges(u);
+    auto yb = y.beginEdges(u), ye = y.endEdges(u);
+    auto ab = a.beginEdges(u);
+    auto fl = [](const auto& a, const auto& b) { return a.first < b.first; };
+    auto it = set_union(xb, xe, yb, ye, ab, fl);
+    a.setDegreeUnchecked(u, it - ab);
   }
   a.updateOmp(true, true);
 }
