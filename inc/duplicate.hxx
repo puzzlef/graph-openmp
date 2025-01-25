@@ -189,7 +189,7 @@ inline void duplicateArenaOmpW(H& a, const G& x) {
   }
   auto t3 = timeNow();
   // Populate the edges.
-  #pragma omp parallel for schedule(dynamic, 2048)
+  #pragma omp parallel for schedule(dynamic, 1024)
   for (K u=0; u<S; ++u) {
     if (!x.hasVertex(u)) continue;
     x.forEachEdge(u, [&](auto v, auto w) {
