@@ -722,12 +722,12 @@ class ArenaDiGraph {
 
 
   /**
-   * Set the degree of a vertex in the graph.
+   * Set the degree of a vertex in the graph, without "any" checks.
    * @param u vertex id
    * @param d new degree of the vertex
-   * @note `update()` must be called after all degrees are set.
+   * @note Ensure that the vertex exists, and it has at least `d` edges.
    */
-  inline void setDegreeUnchecked(K u, K d) {
+  inline void setDegreeUnsafe(K u, K d) {
     degrees[u] = d;
   }
 
@@ -737,10 +737,12 @@ class ArenaDiGraph {
    * @param u source vertex id
    * @param v target vertex id
    * @param w associated weight of the edge
+   * @note Ensure that the vertex exists, and enough capacity is reserved.
    */
-  inline void addEdgeUnchecked(K u, K v, E w=E()) {
+  inline void addEdgeUnsafe(K u, K v, E w=E()) {
     auto *ptr = edges[u];
-    ptr[degrees[u]++] = {v, w};
+    K i = degrees[u]++;
+    ptr[i] = {v, w};
   }
 
 
@@ -749,12 +751,37 @@ class ArenaDiGraph {
    * @param u source vertex id
    * @param v target vertex id
    * @param w associated weight of the edge
+   * @note Ensure that the vertex exists, and enough capacity is reserved.
    */
-  inline void addEdgeUncheckedOmp(K u, K v, E w=E()) {
+  inline void addEdgeUnsafeOmp(K u, K v, E w=E()) {
     auto *ptr = edges[u];
     K i = K();
     #pragma omp atomic capture
     i = degrees[u]++;
+    ptr[i] = {v, w};
+  }
+
+
+  /**
+   * Add an outgoing edge to the graph, without uniqueness check.
+   * @param u source vertex id
+   * @param v target vertex id
+   * @param w associated weight of the edge
+   * @note Ensure that the span of the graph is sufficient.
+   */
+  inline void addEdgeUnchecked(K u, K v, E w=E()) {
+    if (!getBit(exists, u)) setBit(exists, u);
+    if (!getBit(exists, v)) setBit(exists, v);
+    K i = degrees[u]++;
+    if (i >= capacities[u]) {
+      K cap = allocationCapacity(degrees[u]);
+      pair<K, E> *tmp = allocate(cap);
+      if (i>0) memcpy(tmp, edges[u], i*EDGE);
+      if (i>0) deallocate(edges[u], capacities[u]);
+      edges[u] = tmp;
+      capacities[u] = cap;
+    }
+    pair<K, E> *ptr = edges[u];
     ptr[i] = {v, w};
   }
 
@@ -797,7 +824,7 @@ class ArenaDiGraph {
    * @param ie end iterator of edges to add
    * @note [ib, ie) must be sorted and unique.
    */
-  template <class I, class FL>
+  template <class I>
   inline void addEdges(K u, I ib, I ie) {
     if (!hasVertex(u) || ib==ie) return;
     auto *eb = edges[u], *ee = edges[u] + degrees[u];
@@ -1590,7 +1617,7 @@ inline void subtractGraphW(H& a, const GX& x, const GY& y) {
     auto xb = x.beginEdges(u), xe = x.endEdges(u);
     auto ab = a.beginEdges(u);
     auto it = copy(xb, xe, ab);
-    a.setDegreeUnchecked(u, it - ab);
+    a.setDegreeUnsafe(u, it - ab);
   });
   // Now add edges of vertices that are touched.
   y.forEachVertexKey([&](auto u) {
@@ -1600,7 +1627,7 @@ inline void subtractGraphW(H& a, const GX& x, const GY& y) {
     auto ab = a.beginEdges(u);
     auto fl = [](const auto& a, const auto& b) { return a.first < b.first; };
     auto it = set_difference(xb, xe, yb, ye, ab, fl);
-    a.setDegreeUnchecked(u, it - ab);
+    a.setDegreeUnsafe(u, it - ab);
   });
   a.update(true, true);
 }
@@ -1638,7 +1665,7 @@ inline void subtractGraphOmpW(H& a, const GX& x, const GY& y) {
     auto xb = x.beginEdges(u), xe = x.endEdges(u);
     auto ab = a.beginEdges(u);
     auto it = copy(xb, xe, ab);
-    a.setDegreeUnchecked(u, it - ab);
+    a.setDegreeUnsafe(u, it - ab);
   }
   // Now add edges of vertices that are touched.
   #pragma omp parallel for schedule(dynamic, 2048)
@@ -1649,7 +1676,7 @@ inline void subtractGraphOmpW(H& a, const GX& x, const GY& y) {
     auto ab = a.beginEdges(u);
     auto fl = [](const auto& a, const auto& b) { return a.first < b.first; };
     auto it = set_difference(xb, xe, yb, ye, ab, fl);
-    a.setDegreeUnchecked(u, it - ab);
+    a.setDegreeUnsafe(u, it - ab);
   }
   a.updateOmp(true, true);
 }
@@ -1738,7 +1765,7 @@ inline void addGraphW(H& a, const GX& x, const GY& y) {
     auto ab = a.beginEdges(u);
     auto fl = [](const auto& a, const auto& b) { return a.first < b.first; };
     auto it = set_union(xb, xe, yb, ye, ab, fl);
-    a.setDegreeUnchecked(u, it - ab);
+    a.setDegreeUnsafe(u, it - ab);
   }
   a.update(true, true);
 }
@@ -1779,7 +1806,7 @@ inline void addGraphOmpW(H& a, const GX& x, const GY& y) {
     auto ab = a.beginEdges(u);
     auto fl = [](const auto& a, const auto& b) { return a.first < b.first; };
     auto it = set_union(xb, xe, yb, ye, ab, fl);
-    a.setDegreeUnchecked(u, it - ab);
+    a.setDegreeUnsafe(u, it - ab);
   }
   a.updateOmp(true, true);
 }

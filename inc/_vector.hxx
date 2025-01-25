@@ -40,7 +40,7 @@ using vector2d = vector<vector<T>>;
 template <class T>
 inline bool getBit(const T *x, size_t i) {
   constexpr size_t WORD = 8 * sizeof(T);
-  return x[i / WORD] & (1 << (i % WORD));
+  return (x[i / WORD] & (T(1) << (i % WORD))) != 0;
 }
 
 
@@ -52,7 +52,7 @@ inline bool getBit(const T *x, size_t i) {
 template <class T>
 inline void setBit(T *x, size_t i) {
   constexpr size_t WORD = 8 * sizeof(T);
-  x[i / WORD] |= (1 << (i % WORD));
+  x[i / WORD] |= (T(1) << (i % WORD));
 }
 
 
@@ -64,7 +64,7 @@ inline void setBit(T *x, size_t i) {
 template <class T>
 inline void clearBit(T *x, size_t i) {
   constexpr size_t WORD = 8 * sizeof(T);
-  x[i / WORD] &= ~(1 << (i % WORD));
+  x[i / WORD] &= ~(T(1) << (i % WORD));
 }
 #pragma endregion
 

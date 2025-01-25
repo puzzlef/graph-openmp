@@ -10,6 +10,7 @@
 # module load hpcx-2.7.0/hpcx-ompi
 # module load openmpi/4.1.5
 # module load cuda/12.3
+source /opt/rh/gcc-toolset-13/enable
 src="graph-openmp"
 out="$HOME/Logs/$src$1.log"
 ulimit -s unlimited
