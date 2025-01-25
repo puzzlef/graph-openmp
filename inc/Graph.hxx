@@ -21,9 +21,10 @@ using std::distance;
 using std::max;
 using std::find_if;
 using std::lower_bound;
-using std::unique;
 using std::sort;
+using std::unique;
 using std::set_union;
+using std::set_difference;
 
 
 
@@ -758,8 +759,7 @@ class ArenaDiGraph {
     if (!hasVertex(u)) return;
     auto *eb = edges[u], *ee = edges[u] + degrees[u];
     auto  fl = [](const auto& a, const auto& b) { return a.first <  b; };
-    auto  fe = [](const auto& a, const auto& b) { return a.first == b; };
-    auto  it = set_difference_inplace(eb, ee, ib, ie, fl, fe);
+    auto  it = set_difference(eb, ee, ib, ie, fl);
     degrees[u] = it - eb;
   }
 
@@ -780,7 +780,6 @@ class ArenaDiGraph {
     size_t cap = allocationCapacity(deg);
     void  *ptr = allocate(cap);
     auto fl = [](const auto& a, const auto& b) { return a.first <  b.first; };
-    auto fe = [](const auto& a, const auto& b) { return a.first == b.first; };
     auto it = set_union(eb, ee, ib, ie, (pair<K, E>*) ptr, fl);
     degrees[u] = it - eb;
   }
