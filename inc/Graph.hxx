@@ -1197,24 +1197,26 @@ class DiGraphCsr {
   /** Vertex value type (vertex data). */
   using vertex_value_type = V;
   /** Edge value type (edge weight). */
-  using edge_value_type   = E;
+  using edge_value_type = E;
   /** Offset type (edge offset). */
-  using offset_type       = O;
+  using offset_type = O;
   #pragma endregion
 
 
   #pragma region DATA
   public:
   /** Offsets of the outgoing edges of vertices. */
-  vector<O> offsets;
+  O *offsets = nullptr;
   /** Degree of each vertex. */
-  vector<K> degrees;
-  /** Vertex values. */
-  vector<V> values;
+  K *degrees = nullptr;
   /** Vertex ids of the outgoing edges of each vertex (lookup using offsets). */
-  vector<K> edgeKeys;
+  K *edgeKeys = nullptr;
   /** Edge weights of the outgoing edges of each vertex (lookup using offsets). */
-  vector<E> edgeValues;
+  E *edgeValues = nullptr;
+  /** Span of the graph. */
+  size_t SPAN = 0;
+  /** Vertex values. */
+  V *values = nullptr;
   #pragma endregion
 
 
@@ -1227,7 +1229,7 @@ class DiGraphCsr {
    * @returns size of buffer required
    */
   inline size_t span() const noexcept {
-    return degrees.size();
+    return SPAN;
   }
 
   /**
@@ -1235,7 +1237,7 @@ class DiGraphCsr {
    * @returns |V|
    */
   inline size_t order() const noexcept {
-    return degrees.size();
+    return SPAN;
   }
 
   /**
@@ -1243,9 +1245,10 @@ class DiGraphCsr {
    * @returns |E|
    */
   inline size_t size() const noexcept {
+    if (SPAN == 0) return 0;
     size_t M = 0;
-    for (auto d : degrees)
-      M += d;
+    for (size_t u=0; u<SPAN; ++u)
+      M += degrees[u];
     return M;
   }
 
@@ -1254,7 +1257,7 @@ class DiGraphCsr {
    * @returns is the graph empty?
    */
   inline bool empty() const noexcept {
-    return degrees.empty();
+    return SPAN == 0;
   }
 
   /**
@@ -1417,15 +1420,30 @@ class DiGraphCsr {
 
 
   #pragma region UPDATE
+  protected:
+  /**
+   * Free the memory allocated for the CSR representation of the graph.
+   */
+  inline void freeArrays() {
+    delete offsets;
+    delete degrees;
+    delete edgeKeys;
+    delete edgeValues;
+    delete values;
+  }
+
+
   public:
   /**
    * Adjust the order of the graph (or the number of vertices).
    * @param n new order, or number of vertices
    */
   inline void resize(size_t n) {
-    offsets.resize(n+1);
-    degrees.resize(n);
-    values.resize(n);
+    if (n <= SPAN) return;
+    freeArrays();
+    offsets  = new O[n+1];
+    degrees  = new K[n];
+    edgeKeys = new K[n];
   }
 
 
@@ -1435,11 +1453,14 @@ class DiGraphCsr {
    * @param m new size, or number of edges
    */
   inline void resize(size_t n, size_t m) {
-    offsets.resize(n+1);
-    degrees.resize(n);
-    values.resize(n);
-    edgeKeys.resize(m);
-    edgeValues.resize(m);
+    if (n <= SPAN && m <= size()) return;
+    freeArrays();
+    offsets  = new O[n+1];
+    degrees  = new K[n];
+    values   = new V[n];
+    edgeKeys = new K[m];
+    edgeValues = new E[m];
+    SPAN = n;
   }
 
 
@@ -1459,9 +1480,7 @@ class DiGraphCsr {
   /**
    * Create an empty CSR representation of a directed graph.
    */
-  DiGraphCsr() {
-    offsets.push_back(0);
-  }
+  DiGraphCsr() {}
 
 
   /**
@@ -1470,11 +1489,7 @@ class DiGraphCsr {
    * @param m number of edges
    */
   DiGraphCsr(size_t n, size_t m) {
-    offsets.resize(n+1);
-    degrees.resize(n);
-    values.resize(n);
-    edgeKeys.resize(m);
-    edgeValues.resize(m);
+    resize(n, m);
   }
   #pragma endregion
 };

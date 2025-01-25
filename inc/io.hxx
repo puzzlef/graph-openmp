@@ -431,10 +431,11 @@ inline void readMtxFormatToCsrW(G& a, string_view data) {
   K *sources = new K[M];
   K *targets = new K[M];
   E *weights = WEIGHTED? new E[M] : nullptr;
-  K *degrees    = a.degrees.data();
-  K *offsets    = a.offsets.data();
-  K *edgeKeys   = a.edgeKeys.data();
-  E *edgeValues = WEIGHTED? a.edgeValues.data() : nullptr;
+  K *degrees    = a.degrees;
+  K *offsets    = a.offsets;
+  K *edgeKeys   = a.edgeKeys;
+  E *edgeValues = WEIGHTED? a.edgeValues : nullptr;
+  fillValueU(degrees, N, K());
   // Read Edgelist and convert to CSR.
   readEdgelistFormatToListsU<WEIGHTED, BASE, CHECK>(degrees, sources, targets, weights, data, symmetric);
   size_t MA = convertEdgelistToCsrListsW<WEIGHTED>(offsets, edgeKeys, edgeValues, degrees, sources, targets, weights, N);
@@ -485,10 +486,11 @@ inline void readMtxFormatToCsrOmpW(G& a, string_view data) {
   vector<O*> offsets(PARTITIONS);
   vector<K*> edgeKeys(PARTITIONS);
   vector<E*> edgeValues(PARTITIONS);
-  degrees[0]    = a.degrees.data();
-  offsets[0]    = a.offsets.data();
-  edgeKeys[0]   = a.edgeKeys.data();
-  edgeValues[0] = WEIGHTED? a.edgeValues.data() : nullptr;
+  degrees[0]    = a.degrees;
+  offsets[0]    = a.offsets;
+  edgeKeys[0]   = a.edgeKeys;
+  edgeValues[0] = WEIGHTED? a.edgeValues : nullptr;
+  fillValueOmpU(degrees[0], N, K());
   for (int i=1; i<PARTITIONS; ++i) {
     degrees[i]    = new K[N+1];
     offsets[i]    = new O[N+1];
