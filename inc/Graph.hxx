@@ -1577,11 +1577,11 @@ inline void subtractGraphEdgesU(H& a, const G& y) {
  * @param a graph to subtract from (updated)
  * @param y graph to subtract
  */
-template <class H, class G>
+template <int CHUNK=2048, class H, class G>
 inline void subtractGraphOmpU(H& a, const G& y) {
   using  K = typename H::key_type;
   size_t S = y.span();
-  #pragma omp parallel for schedule(dynamic, 2048)
+  #pragma omp parallel for schedule(dynamic, CHUNK)
   for (K u=0; u<S; ++u) {
     if (!y.hasVertex(u) || !a.hasVertex(u)) continue;
     auto yb = y.beginEdges(u), ye = y.endEdges(u);
@@ -1640,7 +1640,7 @@ inline void subtractGraphW(H& a, const GX& x, const GY& y) {
  * @param x graph to subtract from
  * @param y graph to subtract
  */
-template <class H, class GX, class GY>
+template <int CHUNK=2048, class H, class GX, class GY>
 inline void subtractGraphOmpW(H& a, const GX& x, const GY& y) {
   using  K = typename H::key_type;
   size_t S = x.span();
@@ -1659,7 +1659,7 @@ inline void subtractGraphOmpW(H& a, const GX& x, const GY& y) {
     a.allocateEdges(u, x.degree(u));
   }
   // Now add edges of vertices that are untouched.
-  #pragma omp parallel for schedule(dynamic, 2048)
+  #pragma omp parallel for schedule(dynamic, CHUNK)
   for (K u=0; u<S; ++u) {
     if (!x.hasVertex(u) || y.hasVertex(u)) continue;
     auto xb = x.beginEdges(u), xe = x.endEdges(u);
@@ -1668,7 +1668,7 @@ inline void subtractGraphOmpW(H& a, const GX& x, const GY& y) {
     a.setDegreeUnsafe(u, it - ab);
   }
   // Now add edges of vertices that are touched.
-  #pragma omp parallel for schedule(dynamic, 2048)
+  #pragma omp parallel for schedule(dynamic, CHUNK)
   for (K u=0; u<S; ++u) {
     if (!x.hasVertex(u) || !y.hasVertex(u)) continue;
     auto xb = x.beginEdges(u), xe = x.endEdges(u);
@@ -1712,7 +1712,7 @@ inline void addGraphU(H& a, const G& y) {
  * @param a graph to add to (updated)
  * @param y graph to add
  */
-template <class H, class G>
+template <int CHUNK=2048, class H, class G>
 inline void addGraphOmpU(H& a, const G& y) {
   using  K = typename H::key_type;
   size_t A = a.span(), Y = y.span();
@@ -1725,7 +1725,7 @@ inline void addGraphOmpU(H& a, const G& y) {
     a.addVertex(u, y.vertexValue(u));
   }
   // Add new edges.
-  #pragma omp parallel for schedule(dynamic, 2048)
+  #pragma omp parallel for schedule(dynamic, CHUNK)
   for (K u=0; u<Y; ++u) {
     if (!y.hasVertex(u)) continue;
     auto yb = y.beginEdges(u), ye = y.endEdges(u);
@@ -1778,7 +1778,7 @@ inline void addGraphW(H& a, const GX& x, const GY& y) {
  * @param x graph to add from
  * @param y graph to add
  */
-template <class H, class GX, class GY>
+template <int CHUNK=2048, class H, class GX, class GY>
 inline void addGraphOmpW(H& a, const GX& x, const GY& y) {
   using  K = typename H::key_type;
   size_t X = x.span(), Y = y.span();
@@ -1798,7 +1798,7 @@ inline void addGraphOmpW(H& a, const GX& x, const GY& y) {
     a.allocateEdges(u, x.degree(u) + y.degree(u));
   }
   // Now add edges of vertices that are touched.
-  #pragma omp parallel for schedule(dynamic, 2048)
+  #pragma omp parallel for schedule(dynamic, CHUNK)
   for (K u=0; u<S; ++u) {
     if (!x.hasVertex(u) && !y.hasVertex(u)) continue;
     auto xb = x.beginEdges(u), xe = x.endEdges(u);

@@ -5,12 +5,8 @@ const path = require('path');
 const ROMPTH = /^OMP_NUM_THREADS=(\d+)/m;
 const RGRAPH = /^Loading graph .*\/(.*?)\.mtx \.\.\./m;
 const RORDER = /^order: (\d+) size: (\d+) \[directed\] \{\}/m;
-const RRESLT = /^\{(.+?)ms\} (\w+)/m;
-const RRESRV = /^\w+: Reserve space\s*=\s*(.+?) ms/m;
-const RADDVT = /^\w+: Add vertices\s*=\s*(.+?) ms/m;
-const RRSEDG = /^\w+: Reserve edges\s*=\s*(.+?) ms/m;
-const RADDED = /^\w+: Add edges\s*=\s*(.+?) ms/m;
-const RUPDAT = /^\w+: Update\s*=\s*(.+?) ms/m;
+const RBATCH = /^Batch fraction: (.+)/m;
+const RRESLT = /^\{(.+?)ms; (.+?)ms duplicate\} (.+)/m;
 
 
 
@@ -58,43 +54,21 @@ function readLogLine(ln, data, state) {
     var [, graph] = RGRAPH.exec(ln);
     if (!data.has(graph)) data.set(graph, []);
     state.graph = graph;
-    state.order = 0;
-    state.size  = 0;
-    state.reserve_space_time = 0;
-    state.add_vertices_time  = 0;
-    state.reserve_edges_time = 0;
-    state.add_edges_time     = 0;
-    state.update_time        = 0;
   }
   else if (RORDER.test(ln)) {
     var [, order, size] = RORDER.exec(ln);
     state.order = parseFloat(order);
     state.size  = parseFloat(size);
   }
-  else if (RRESRV.test(ln)) {
-    var [, reserve_space_time] = RRESRV.exec(ln);
-    state.reserve_space_time   = parseFloat(reserve_space_time);
-  }
-  else if (RADDVT.test(ln)) {
-    var [, add_vertices_time] = RADDVT.exec(ln);
-    state.add_vertices_time   = parseFloat(add_vertices_time);
-  }
-  else if (RRSEDG.test(ln)) {
-    var [, reserve_edges_time] = RRSEDG.exec(ln);
-    state.reserve_edges_time   = parseFloat(reserve_edges_time);
-  }
-  else if (RADDED.test(ln)) {
-    var [, add_edges_time] = RADDED.exec(ln);
-    state.add_edges_time   = parseFloat(add_edges_time);
-  }
-  else if (RUPDAT.test(ln)) {
-    var [, update_time] = RUPDAT.exec(ln);
-    state.update_time   = parseFloat(update_time);
+  else if (RBATCH.test(ln)) {
+    var [, batch_fraction] = RBATCH.exec(ln);
+    state.batch_fraction   = parseFloat(batch_fraction);
   }
   else if (RRESLT.test(ln)) {
-    var [, time, technique] = RRESLT.exec(ln);
+    var [, time, duplicate_time, technique] = RRESLT.exec(ln);
     data.get(state.graph).push(Object.assign({}, state, {
-      time: parseFloat(time),
+      time:           parseFloat(time),
+      duplicate_time: parseFloat(duplicate_time),
       technique,
     }));
   }
