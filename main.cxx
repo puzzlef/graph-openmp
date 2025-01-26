@@ -36,7 +36,7 @@ using namespace std;
 
 #pragma region METHODS
 #pragma region PERFORM EXPERIMENT
-template <int CHUNK=2048, class G, class GD>
+template <class G, class GD>
 inline void testSubractGraphInplace(const G& x, const GD& ydel) {
   using K = typename G::key_type;
   using V = typename G::vertex_value_type;
@@ -48,14 +48,14 @@ inline void testSubractGraphInplace(const G& x, const GD& ydel) {
     duplicateArenaOmpW(y, x);
   });
   float t1 = measureDuration([&]() {
-    subtractGraphOmpU<CHUNK>(y, ydel);
+    subtractGraphOmpU(y, ydel);
   });
   println(y);
-  printf("{%09.1fms; %09.1fms duplicate} %s%d\n", t1, t0, "subtractGraphInplace", CHUNK);
+  printf("{%09.1fms; %09.1fms duplicate} %s\n", t1, t0, "subtractGraphInplace");
 }
 
 
-template <int CHUNK=2048, class G, class GI>
+template <class G, class GI>
 inline void testAddGraphInplace(const G& x, const GI& yins) {
   using K = typename G::key_type;
   using V = typename G::vertex_value_type;
@@ -67,14 +67,14 @@ inline void testAddGraphInplace(const G& x, const GI& yins) {
     duplicateArenaOmpW(y, x);
   });
   float t1 = measureDuration([&]() {
-    addGraphOmpU<CHUNK>(y, yins);
+    addGraphOmpU(y, yins);
   });
   println(y);
-  printf("{%09.1fms; %09.1fms duplicate} %s%d\n", t1, t0, "addGraphInplace", CHUNK);
+  printf("{%09.1fms; %09.1fms duplicate} %s\n", t1, t0, "addGraphInplace");
 }
 
 
-template <int CHUNK=2048, class G, class GD>
+template <class G, class GD>
 inline void testSubtractGraphNew(const G& x, const GD& ydel) {
   using K = typename G::key_type;
   using V = typename G::vertex_value_type;
@@ -83,14 +83,14 @@ inline void testSubtractGraphNew(const G& x, const GD& ydel) {
   y.setAllocator(x.allocator());
   printf("Applying edge deletions into a new graph ...\n");
   float t = measureDuration([&]() {
-    subtractGraphOmpW<CHUNK>(y, x, ydel);
+    subtractGraphOmpW(y, x, ydel);
   });
   println(y);
-  printf("{%09.1fms; %09.1fms duplicate} %s%d\n", t, 0.0, "subtractGraphNew", CHUNK);
+  printf("{%09.1fms; %09.1fms duplicate} %s\n", t, 0.0, "subtractGraphNew");
 }
 
 
-template <int CHUNK=2048, class G, class GI>
+template <class G, class GI>
 inline void testAddGraphNew(const G& x, const GI& yins) {
   using K = typename G::key_type;
   using V = typename G::vertex_value_type;
@@ -99,10 +99,10 @@ inline void testAddGraphNew(const G& x, const GI& yins) {
   y.setAllocator(x.allocator());
   printf("Applying edge insertions into a new graph ...\n");
   float t = measureDuration([&]() {
-    addGraphOmpW<CHUNK>(y, x, yins);
+    addGraphOmpW(y, x, yins);
   });
   println(y);
-  printf("{%09.1fms; %09.1fms duplicate} %s%d\n", t, 0.0, "addGraphNew", CHUNK);
+  printf("{%09.1fms; %09.1fms duplicate} %s\n", t, 0.0, "addGraphNew");
 }
 
 
@@ -120,7 +120,7 @@ inline void runExperiment(const G& x) {
   random_device dev;
   default_random_engine rnd(dev());
   // Experiment of various batch fractions.
-  for (double frac=1e-1; frac<=1e-1; frac*=10) {
+  for (double frac=1e-7; frac<=1e-1; frac*=10) {
     printf("Batch fraction: %.1e\n", frac);
     // Generate random edge deletions and insertions.
     printf("Generating random edge deletions and insertions ...\n");
@@ -145,26 +145,12 @@ inline void runExperiment(const G& x) {
     yins.updateOmp();
     printf("Edge deletions:  "); println(ydel);
     printf("Edge insertions: "); println(yins);
-    // Appy edge deletions in-place.
-    testSubractGraphInplace<256>(x, ydel);
-    testSubractGraphInplace<512>(x, ydel);
-    testSubractGraphInplace<1024>(x, ydel);
-    testSubractGraphInplace<2048>(x, ydel);
-    // Apply edge insertions in-place.
-    testAddGraphInplace<256>(x, yins);
-    testAddGraphInplace<512>(x, yins);
-    testAddGraphInplace<1024>(x, yins);
-    testAddGraphInplace<2048>(x, yins);
-    // Apply edge deletions to a new graph.
-    testSubtractGraphNew<256>(x, ydel);
-    testSubtractGraphNew<512>(x, ydel);
-    testSubtractGraphNew<1024>(x, ydel);
-    testSubtractGraphNew<2048>(x, ydel);
-    // Apply edge insertions to a new graph.
-    testAddGraphNew<256>(x, yins);
-    testAddGraphNew<512>(x, yins);
-    testAddGraphNew<1024>(x, yins);
-    testAddGraphNew<2048>(x, yins);
+    // Appy edge deletions/insertions in-place.
+    testSubractGraphInplace(x, ydel);
+    testAddGraphInplace(x, yins);
+    // Apply edge deletions/insertions to a new graph.
+    testSubtractGraphNew(x, ydel);
+    testAddGraphNew(x, yins);
     printf("\n");
   }
 }
