@@ -1577,7 +1577,7 @@ inline void subtractGraphEdgesU(H& a, const G& y) {
  * @param a graph to subtract from (updated)
  * @param y graph to subtract
  */
-template <int CHUNK=2048, class H, class G>
+template <int CHUNK=1024, class H, class G>
 inline void subtractGraphOmpU(H& a, const G& y) {
   using  K = typename H::key_type;
   size_t S = y.span();
@@ -1640,7 +1640,7 @@ inline void subtractGraphW(H& a, const GX& x, const GY& y) {
  * @param x graph to subtract from
  * @param y graph to subtract
  */
-template <int CHUNK=2048, class H, class GX, class GY>
+template <int CHUNK=1024, class H, class GX, class GY>
 inline void subtractGraphOmpW(H& a, const GX& x, const GY& y) {
   using  K = typename H::key_type;
   size_t S = x.span();
@@ -1712,7 +1712,7 @@ inline void addGraphU(H& a, const G& y) {
  * @param a graph to add to (updated)
  * @param y graph to add
  */
-template <int CHUNK=2048, class H, class G>
+template <int CHUNK=512, class H, class G>
 inline void addGraphOmpU(H& a, const G& y) {
   using  K = typename H::key_type;
   size_t A = a.span(), Y = y.span();
@@ -1778,7 +1778,7 @@ inline void addGraphW(H& a, const GX& x, const GY& y) {
  * @param x graph to add from
  * @param y graph to add
  */
-template <int CHUNK=2048, class H, class GX, class GY>
+template <int CHUNK=512, class H, class GX, class GY>
 inline void addGraphOmpW(H& a, const GX& x, const GY& y) {
   using  K = typename H::key_type;
   size_t X = x.span(), Y = y.span();
