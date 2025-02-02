@@ -296,7 +296,7 @@ inline size_t convertEdgelistToCsrListsW(IO offsets, IK edgeKeys, IE edgeValues,
   offsets[0] = O();
   size_t   M = exclusiveScanW(offsets+1, degrees, rows);
   // Populate CSR.
-  for (size_t i=0; i<rows; ++i) {
+  for (size_t i=0; i<M; ++i) {
     size_t u = sources[i];
     size_t v = targets[i];
     size_t j = offsets[u+1]++;
@@ -406,7 +406,7 @@ inline size_t convertEdgelistToCsrListsOmpW(IIO offsets, IIK edgeKeys, IIE edgeV
 
 
 
-#pragma region READ EDGELIST FORMAT TO CSR
+#pragma region READ MTX FORMAT TO CSR
 /**
  * Read data in MTX format, and convert to CSR.
  * @tparam WEIGHTED is graph weighted?
@@ -486,7 +486,7 @@ inline void readMtxFormatToCsrOmpW(G& a, string_view data) {
   vector<O*> offsets(PARTITIONS);
   vector<K*> edgeKeys(PARTITIONS);
   vector<E*> edgeValues(PARTITIONS);
-  degrees[0]    = a.degrees;
+  degrees[0]    = a.degrees;  // NOTE: Assuming that a.degrees is zero-initialized.
   offsets[0]    = a.offsets;
   edgeKeys[0]   = a.edgeKeys;
   edgeValues[0] = WEIGHTED? a.edgeValues : nullptr;
@@ -496,6 +496,7 @@ inline void readMtxFormatToCsrOmpW(G& a, string_view data) {
     offsets[i]    = new O[N+1];
     edgeKeys[i]   = new K[M];
     edgeValues[i] = WEIGHTED? new E[M] : nullptr;
+    fillValueOmpU(degrees[i], N+1, K());
   }
   // Read Edgelist and convert to CSR.
   vector<size_t> counts = readEdgelistFormatToListsOmpU<WEIGHTED, BASE, CHECK, PARTITIONS>(degrees, sources, targets, weights, data, symmetric);
@@ -509,6 +510,230 @@ inline void readMtxFormatToCsrOmpW(G& a, string_view data) {
   }
   // Free space for degrees, offsets, edge keys, and edge values.
   for (int i=1; i<PARTITIONS; ++i) {
+    delete degrees[i];
+    delete offsets[i];
+    delete edgeKeys[i];
+    if (WEIGHTED) delete edgeValues[i];
+  }
+}
+#pragma endregion
+
+
+
+
+#pragma region CONVERT EDGELIST TO GRAPH
+/**
+ * Convert Edgelist to Graph (Arena-allocator based).
+ * @tparam WEIGHTED is graph weighted?
+ * @param a output graph (output)
+ * @param degrees vertex degrees
+ * @param sources source vertices
+ * @param targets target vertices
+ * @param weights edge weights
+ * @param rows number of rows/vertices
+ * @returns number of edges in the Edgelist
+ */
+template <bool WEIGHTED=false, class G, class IO, class IK, class IE>
+inline size_t convertEdgelistToGraphW(G& a, IK degrees, IK sources, IK targets, IE weights, size_t rows) {
+  using K = typename G::key_type;
+  using E = typename G::edge_value_type;
+  a.clear();
+  a.reserve(rows);
+  // Add vertices.
+  for (K u=0; u<rows; ++u)
+    a.addVertex(u);
+  // Allocate space for edges.
+  size_t M = 0;
+  for (K u=0; u<rows; ++u) {
+    a.allocateEdges(u, degrees[u]);
+    M += degrees[u];
+  }
+  // Populate edges.
+  for (size_t i=0; i<M; ++i)
+    a.addEdge(sources[i], targets[i], WEIGHTED? weights[i] : E(1));
+  return M;
+}
+
+
+/**
+ * Convert Edgelist to Graph (Arena-allocator based).
+ * @tparam WEIGHTED is graph weighted?
+ * @tparam PARTITIONS number of partitions for vertex degrees
+ * @param a output graph (output)
+ * @param offsets per-partition CSR offsets (scratch)
+ * @param edgeKeys per-partition CSR edge keys (scratch)
+ * @param edgeValues per-partition CSR edge values (scratch)
+ * @param degrees per-partition vertex degrees (updated)
+ * @param sources per-thread source vertices
+ * @param targets per-thread target vertices
+ * @param weights per-thread edge weights
+ * @param counts per-thread number of edges read
+ * @param rows number of rows/vertices
+ * @returns number of edges in the Edgelist
+ * @note offsets[0], edgeKeys[0], and edgeValues[0] are special.
+ * @note They are used to store global offsets, edge keys, and edge values.
+ */
+template <bool WEIGHTED=false, int PARTITIONS=4, class G, class IIO, class IIK, class IIE>
+inline size_t convertEdgelistToGraphOmpW(G &a, IIO offsets, IIK edgeKeys, IIE edgeValues, IIK degrees, IIK sources, IIK targets, IIE weights, const vector<size_t>& counts, size_t rows) {
+  using  O = remove_reference_t<decltype(offsets[0][0])>;
+  using  K = typename G::key_type;
+  using  E = typename G::edge_value_type;
+  int    T = omp_get_max_threads();
+  size_t M = 0;
+  vector<size_t> buf(T);
+  // Compute per-partition shifted offsets at offsets[p].
+  for (int p=0; p<PARTITIONS; ++p) {
+    offsets[p][0] = O();
+    size_t MP = exclusiveScanOmpW(offsets[p]+1, buf.data(), degrees[p], rows);
+    M += MP;
+  }
+  // Populate per-partition CSR at edgeKeys[p] and edgeValues[p].
+  #pragma omp parallel
+  {
+    int t = omp_get_thread_num();
+    size_t I = counts[t];
+    for (size_t i=0; i<I; ++i) {
+      const int p = t % PARTITIONS;
+      size_t u = sources[t][i];
+      size_t v = targets[t][i];
+      size_t j = 0;
+      #pragma omp atomic capture
+      j = offsets[p][u+1]++;
+      edgeKeys[p][j] = v;
+      if constexpr (WEIGHTED) edgeValues[p][j] = weights[t][i];
+    }
+  }
+  auto fdeg = [&](auto u) {
+    if (PARTITIONS==1) return degrees[0][u];
+    else if (PARTITIONS==2) return degrees[0][u] + degrees[1][u];
+    else if (PARTITIONS==4) return degrees[0][u] + degrees[1][u] + degrees[2][u] + degrees[3][u];
+    else if (PARTITIONS==8) return degrees[0][u] + degrees[1][u] + degrees[2][u] + degrees[3][u] + degrees[4][u] + degrees[5][u] + degrees[6][u] + degrees[7][u];
+    else {
+      K d = K();
+      for (int t=0; t<PARTITIONS; ++t)
+        d += degrees[t][u];
+      return d;
+    }
+  };
+  a.clearOmp();
+  a.reserveOmp(rows);
+  // Allocate space for vertices.
+  #pragma omp parallel for schedule(static, 2048)
+  for (size_t u=0; u<rows; ++u)
+    a.addVertex(u);
+  // Allocate space for edges.
+  #pragma omp parallel for schedule(dynamic, 2048)
+  for (size_t u=0; u<rows; ++u)
+    a.allocateEdges(u, fdeg(u));
+  // Populate edges.
+  #pragma omp parallel for schedule(dynamic, 1024)
+  for (size_t u=0; u<rows; ++u) {
+    for (int p=0; p<PARTITIONS; ++p) {
+      size_t i = offsets[p][u];
+      size_t I = offsets[p][u+1];
+      for (; i<I; ++i)
+        a.addEdgeUnsafe(u, edgeKeys[p][i], WEIGHTED? edgeValues[p][i] : E(1));
+    }
+  }
+  a.updateOmp(true, false);
+  return M;
+}
+#pragma endregion
+
+
+
+
+#pragma region READ MTX FORMAT TO GRAPH
+/**
+ * Read data in MTX format, and convert to Graph (Arena-allocator based).
+ * @tparam WEIGHTED is graph weighted?
+ * @tparam BASE base vertex id (0 or 1)
+ * @tparam CHECK check for error?
+ * @param a output csr graph (updated)
+ * @param data input data
+ */
+template <bool WEIGHTED=false, int BASE=1, bool CHECK=false, class G>
+inline void readMtxFormatToGraphW(G& a, string_view data) {
+  using K = typename G::key_type;
+  using E = typename G::edge_value_type;
+  // Read MTX format header.
+  bool symmetric; size_t rows, cols, size;
+  size_t head = readMtxFormatHeaderW(symmetric, rows, cols, size, data);
+  data.remove_prefix(head);
+  // Allocate space for sources, targets, and weights.
+  size_t N = max(rows, cols);
+  size_t M = symmetric? 2 * size : size;
+  K *sources = new K[M];
+  K *targets = new K[M];
+  E *weights = WEIGHTED? new E[M] : nullptr;
+  K *degrees = new K[N+1];
+  fillValueU(degrees, N+1, K());
+  // Read Edgelist and convert to CSR.
+  readEdgelistFormatToListsU<WEIGHTED, BASE, CHECK>(degrees, sources, targets, weights, data, symmetric);
+  size_t MA = convertEdgelistToGraphW<WEIGHTED>(a, degrees, sources, targets, weights, N);
+  // Free space for sources, targets, and weights.
+  delete sources;
+  delete targets;
+  if (WEIGHTED) delete weights;
+  delete degrees;
+}
+
+
+/**
+ * Read data in MTX format, and convert to Graph (Arena-allocator based).
+ * @tparam WEIGHTED is graph weighted?
+ * @tparam BASE base vertex id (0 or 1)
+ * @tparam CHECK check for error?
+ * @tparam PARTITIONS number of partitions for vertex degrees
+ * @param a output csr graph (updated)
+ * @param data input data
+ */
+template <bool WEIGHTED=false, int BASE=1, bool CHECK=false, int PARTITIONS=4, class G>
+inline void readMtxFormatToGraphOmpW(G& a, string_view data) {
+  using O = typename G::offset_type;
+  using K = typename G::key_type;
+  using E = typename G::edge_value_type;
+  // Read MTX format header.
+  bool symmetric; size_t rows, cols, size;
+  size_t head = readMtxFormatHeaderW(symmetric, rows, cols, size, data);
+  data.remove_prefix(head);
+  // Allocate space for sources, targets, weights.
+  const int T = omp_get_max_threads();
+  size_t N = max(rows, cols);
+  size_t M = symmetric? 2 * size : size;
+  vector<K*> sources(T);
+  vector<K*> targets(T);
+  vector<E*> weights(T);
+  for (int i=0; i<T; ++i) {
+    sources[i] = new K[M];
+    targets[i] = new K[M];
+    weights[i] = WEIGHTED? new E[M] : nullptr;
+  }
+  // Allocate space for degrees, offsets, edge keys, and edge values
+  // Note that degrees[0], offsets[0], edgeKeys[0], and edgeValues[0] are special.
+  // They point to the global degrees, offsets, edge keys, and edge values in the CSR.
+  vector<K*> degrees(PARTITIONS);
+  vector<O*> offsets(PARTITIONS);
+  vector<K*> edgeKeys(PARTITIONS);
+  vector<E*> edgeValues(PARTITIONS);
+  for (int i=0; i<PARTITIONS; ++i) {
+    degrees[i]    = new K[N+1];
+    offsets[i]    = new O[N+1];
+    edgeKeys[i]   = new K[M];
+    edgeValues[i] = WEIGHTED? new E[M] : nullptr;
+    fillValueOmpU(degrees[i], N+1, K());
+  }
+  // Read Edgelist and convert to CSR.
+  vector<size_t> counts = readEdgelistFormatToListsOmpU<WEIGHTED, BASE, CHECK, PARTITIONS>(degrees, sources, targets, weights, data, symmetric);
+  size_t MA = convertEdgelistToGraphOmpW<WEIGHTED, PARTITIONS>(a, offsets, edgeKeys, edgeValues, degrees, sources, targets, weights, counts, N);
+  // Free space for sources, targets, and weights.
+  for (int i=0; i<T; ++i) {
+    delete sources[i];
+    delete targets[i];
+    if (WEIGHTED) delete weights[i];
+  }
+  // Free space for degrees, offsets, edge keys, and edge values.
+  for (int i=0; i<PARTITIONS; ++i) {
     delete degrees[i];
     delete offsets[i];
     delete edgeKeys[i];
