@@ -29,6 +29,10 @@ using namespace std;
 /** Number of times to repeat each method. */
 #define REPEAT_METHOD 5
 #endif
+#ifndef VISIT_STEPS
+/** Number of steps to visit vertices. */
+#define VISIT_STEPS 42
+#endif
 #pragma endregion
 
 
@@ -52,6 +56,8 @@ inline void testSubractGraphInplace(const G& x, const GD& ydel) {
   });
   println(y);
   printf("{%09.1fms; %09.1fms duplicate} %s\n", t1, t0, "subtractGraphInplace");
+  testVisitCountBfs(y, VISIT_STEPS);
+  y.clearOmp();
 }
 
 
@@ -71,6 +77,8 @@ inline void testAddGraphInplace(const G& x, const GI& yins) {
   });
   println(y);
   printf("{%09.1fms; %09.1fms duplicate} %s\n", t1, t0, "addGraphInplace");
+  testVisitCountBfs(y, VISIT_STEPS);
+  y.clearOmp();
 }
 
 
@@ -87,6 +95,8 @@ inline void testSubtractGraphNew(const G& x, const GD& ydel) {
   });
   println(y);
   printf("{%09.1fms; %09.1fms duplicate} %s\n", t, 0.0, "subtractGraphNew");
+  testVisitCountBfs(y, VISIT_STEPS);
+  y.clearOmp();
 }
 
 
@@ -103,7 +113,39 @@ inline void testAddGraphNew(const G& x, const GI& yins) {
   });
   println(y);
   printf("{%09.1fms; %09.1fms duplicate} %s\n", t, 0.0, "addGraphNew");
+  testVisitCountBfs(y, VISIT_STEPS);
+  y.clearOmp();
 }
+
+
+template <class G>
+inline void testVisitCountBfs(const G& x, int steps) {
+  size_t S = x.span();
+  printf("Testing visit count with BFS [%d steps] ...\n", steps);
+  vector<size_t> visits0(S, 1);
+  vector<size_t> visits1(S, 0);
+  auto t0 = timeNow();
+  for (int i=0; i<steps; ++i) {
+    #pragma omp parallel for schedule(dynamic, 512)
+    for (size_t u=0; u<S; ++u) {
+      if (!x.hasVertex(u)) continue;
+      visits1[u] = 0;
+      x.forEachEdgeKey(u, [&](auto v) {
+        visits1[u] += visits0[v];
+      });
+    }
+    swap(visits0, visits1);
+  }
+  auto t1 = timeNow();
+  size_t total = 0;
+  # pragma omp parallel for reduction(+:total) schedule(dynamic, 2048)
+  for (size_t u=0; u<S; ++u)
+    total += visits0[u];
+  printf("Total visits: %zu\n", total);
+  printf("{%09.1fms} %s\n", duration(t0, t1), "visitCountBfs");
+}
+
+
 
 
 /**
@@ -119,6 +161,13 @@ inline void runExperiment(const G& x) {
   // Create random number generator.
   random_device dev;
   default_random_engine rnd(dev());
+  // Test transpose graph.
+  {
+    ArenaDiGraph<K, V, E> ytr;
+    ytr.setAllocator(x.allocator());
+    transposeArenaOmpW(ytr, x);
+    ytr.clearOmp();
+  }
   // Experiment of various batch fractions.
   for (double frac=1e-7; frac<=1e-1; frac*=10) {
     printf("Batch fraction: %.1e\n", frac);
@@ -151,6 +200,9 @@ inline void runExperiment(const G& x) {
     // Apply edge deletions/insertions to a new graph.
     testSubtractGraphNew(x, ydel);
     testAddGraphNew(x, yins);
+    // Clear memory.
+    ydel.clearOmp();
+    yins.clearOmp();
     printf("\n");
   }
 }

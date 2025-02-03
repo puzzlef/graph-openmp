@@ -6,7 +6,7 @@ const ROMPTH = /^OMP_NUM_THREADS=(\d+)/m;
 const RGRAPH = /^Loading graph .*\/(.*?)\.mtx \.\.\./m;
 const RORDER = /^order: (\d+) size: (\d+) \[directed\] \{\}/m;
 const RBATCH = /^Batch fraction: (.+)/m;
-const RRESLT = /^\{(.+?)ms; (.+?)ms duplicate\} (.+)/m;
+const RRESLT = /^\{(.+?)ms(?:; (.+?)ms duplicate)?\} (.+)/m;
 
 
 
@@ -49,6 +49,13 @@ function readLogLine(ln, data, state) {
   if (ROMPTH.test(ln)) {
     var [, omp_num_threads] = ROMPTH.exec(ln);
     state.omp_num_threads   = parseFloat(omp_num_threads);
+    state.graph = '';
+    state.order = 0;
+    state.size  = 0;
+    state.batch_fraction = 0;
+    state.time = 0;
+    state.duplicate_time = 0;
+    state.technique = '';
   }
   else if (RGRAPH.test(ln)) {
     var [, graph] = RGRAPH.exec(ln);
@@ -66,9 +73,13 @@ function readLogLine(ln, data, state) {
   }
   else if (RRESLT.test(ln)) {
     var [, time, duplicate_time, technique] = RRESLT.exec(ln);
+    if (technique==='visitCountBfs') {
+      var last   = data.get(state.graph).slice(-1)[0];
+      technique += last.technique.startsWith('add')? '+' : '-';
+    }
     data.get(state.graph).push(Object.assign({}, state, {
       time:           parseFloat(time),
-      duplicate_time: parseFloat(duplicate_time),
+      duplicate_time: parseFloat(duplicate_time || '0'),
       technique,
     }));
   }
