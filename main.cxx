@@ -29,6 +29,10 @@ using namespace std;
 /** Number of times to repeat each method. */
 #define REPEAT_METHOD 5
 #endif
+#ifndef VISIT_STEPS
+/** Number of steps to visit vertices. */
+#define VISIT_STEPS 42
+#endif
 #pragma endregion
 
 
@@ -52,6 +56,7 @@ inline void testSubractGraphInplace(const G& x, const GD& ydel) {
   });
   println(y);
   printf("{%09.1fms; %09.1fms duplicate} %s\n", t1, t0, "subtractGraphInplace");
+  testVisitCountBfs(y, VISIT_STEPS);
 }
 
 
@@ -71,6 +76,7 @@ inline void testAddGraphInplace(const G& x, const GI& yins) {
   });
   println(y);
   printf("{%09.1fms; %09.1fms duplicate} %s\n", t1, t0, "addGraphInplace");
+  testVisitCountBfs(y, VISIT_STEPS);
 }
 
 
@@ -87,6 +93,7 @@ inline void testSubtractGraphNew(const G& x, const GD& ydel) {
   });
   println(y);
   printf("{%09.1fms; %09.1fms duplicate} %s\n", t, 0.0, "subtractGraphNew");
+  testVisitCountBfs(y, VISIT_STEPS);
 }
 
 
@@ -103,7 +110,130 @@ inline void testAddGraphNew(const G& x, const GI& yins) {
   });
   println(y);
   printf("{%09.1fms; %09.1fms duplicate} %s\n", t, 0.0, "addGraphNew");
+  testVisitCountBfs(y, VISIT_STEPS);
 }
+
+
+template <class H, class G>
+inline void testTransposeReserveGraph(H& a, const G& x) {
+  using  K = typename G::key_type;
+  size_t S = x.span();
+  vector2d<K> degrees(8, vector<K>(S, 0));
+  printf("Transposing graph [using reserve] ...\n");
+  auto t0 = timeNow();
+  a.clearOmp();
+  a.reserveOmp(S);
+  auto t1 = timeNow();
+  // Measure the degree of each vertex in the transposed graph.
+  #pragma omp parallel for schedule(dynamic, 1024)
+  for (size_t u=0; u<S; ++u) {
+    int t = omp_get_thread_num();
+    if (!x.hasVertex(u)) continue;
+    x.forEachEdgeKey(u, [&](auto v) {
+      #pragma omp atomic update
+      ++degrees[t % 8][v];
+    });
+  }
+  auto t2 = timeNow();
+  // Add vertices.
+  #pragma omp parallel for schedule(static, 2048)
+  for (size_t u=0; u<S; ++u)
+    a.addVertex(u, x.vertexValue(u));
+  auto t3 = timeNow();
+  // Reverse space for edges.
+  #pragma omp parallel for schedule(static, 2048)
+  for (size_t u=0; u<S; ++u)
+    a.allocateEdges(u, degrees[0][u] + degrees[1][u] + degrees[2][u] + degrees[3][u] + degrees[4][u] + degrees[5][u] + degrees[6][u] + degrees[7][u]);
+  auto t4 = timeNow();
+  // Populate edges.
+  // #pragma omp parallel for schedule(dynamic, 256)
+  // for (size_t u=0; u<S; ++u) {
+  //   x.forEachEdge(u, [&](auto v, auto w) {
+  //     a.addEdgeUnsafeOmp(v, u, w);
+  //   });
+  // }
+  #pragma omp parallel
+  {
+    int T = omp_get_num_threads();
+    int t = omp_get_thread_num();
+    x.forEachVertexKey([&](auto u) {
+      x.forEachEdge(u, [&](auto v, auto w) {
+        if (belongsOmp(v, t, T)) a.addEdgeUnsafe(v, u, w);
+      });
+    });
+  }
+  auto t5 = timeNow();
+  a.updateOmp(true);
+  auto t6 = timeNow();
+  println(a);
+  printf("{%09.1fms} %s\n", duration(t0, t5), "transposeReserveGraph");
+  printf("{%09.1fms} Reserve\n", duration(t0, t1));
+  printf("{%09.1fms} Measure degrees\n", duration(t1, t2));
+  printf("{%09.1fms} Add vertices\n", duration(t2, t3));
+  printf("{%09.1fms} Allocate edges\n", duration(t3, t4));
+  printf("{%09.1fms} Populate edges\n", duration(t4, t5));
+  printf("{%09.1fms} Update\n", duration(t5, t6));
+}
+
+
+template <class H, class G>
+inline void testTransposeNoReserveGraph(H& a, const G& x) {
+  using  K = typename G::key_type;
+  size_t S = x.span();
+  printf("Transposing graph [without reserve] ...\n");
+  auto t0 = timeNow();
+  a.clearOmp();
+  a.reserveOmp(S);
+  // Add vertices.
+  #pragma omp parallel for schedule(static, 2048)
+  for (size_t u=0; u<S; ++u)
+    a.addVertex(u, x.vertexValue(u));
+  // Populate edges.
+  #pragma omp parallel
+  {
+    int T = omp_get_num_threads();
+    int t = omp_get_thread_num();
+    x.forEachVertexKey([&](auto u) {
+      x.forEachEdge(u, [&](auto v, auto w) {
+        if (belongsOmp(v, t, T)) a.addEdgeUnchecked(v, u, w);
+      });
+    });
+  }
+  a.updateOmp(true);
+  auto t1 = timeNow();
+  println(a);
+  printf("{%09.1fms} %s\n", duration(t0, t1), "transposeNoReserveGraph");
+}
+
+
+template <class G>
+inline void testVisitCountBfs(const G& x, int steps) {
+  size_t S = x.span();
+  printf("Testing visit count with BFS [%d steps] ...\n", steps);
+  vector<size_t> visits0(S, 1);
+  vector<size_t> visits1(S, 0);
+  auto t0 = timeNow();
+  for (int i=0; i<steps; ++i) {
+    #pragma omp parallel for schedule(dynamic, 512)
+    for (size_t u=0; u<S; ++u) {
+      if (!x.hasVertex(u)) continue;
+      visits1[u] = 0;
+      x.forEachEdgeKey(u, [&](auto v) {
+        visits1[u] += visits0[v];
+      });
+    }
+    swap(visits0, visits1);
+  }
+  auto t1 = timeNow();
+  size_t total = 0;
+  # pragma omp parallel for reduction(+:total) schedule(dynamic, 2048)
+  for (size_t u=0; u<S; ++u)
+    total += visits0[u];
+  printf("Total visits: %zu\n", total);
+  printf("{%09.1fms} %s\n", duration(t0, t1), "visitCountBfs");
+}
+
+
 
 
 /**
@@ -119,6 +249,18 @@ inline void runExperiment(const G& x) {
   // Create random number generator.
   random_device dev;
   default_random_engine rnd(dev());
+  // Test transpose graph.
+  {
+    ArenaDiGraph<K, V, E> ytr;
+    ytr.setAllocator(x.allocator());
+    // testTransposeReserveGraph(ytr, x);
+    transposeArenaOmpW(ytr, x);
+  }
+  // {
+  //   ArenaDiGraph<K, V, E> ytr;
+  //   ytr.setAllocator(x.allocator());
+  //   testTransposeNoReserveGraph(ytr, x);
+  // }
   // Experiment of various batch fractions.
   for (double frac=1e-7; frac<=1e-1; frac*=10) {
     printf("Batch fraction: %.1e\n", frac);

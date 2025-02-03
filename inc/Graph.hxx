@@ -770,8 +770,8 @@ class ArenaDiGraph {
    * @note Ensure that the span of the graph is sufficient.
    */
   inline void addEdgeUnchecked(K u, K v, E w=E()) {
-    if (!getBit(exists, u)) setBit(exists, u);
-    if (!getBit(exists, v)) setBit(exists, v);
+    // if (!getBit(exists, u)) setBit(exists, u);
+    // if (!getBit(exists, v)) setBit(exists, v);
     K i = degrees[u]++;
     if (i >= capacities[u]) {
       K cap = allocationCapacity(degrees[u]);
