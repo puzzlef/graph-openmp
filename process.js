@@ -4,6 +4,7 @@ const path = require('path');
 
 const ROMPTH = /^OMP_NUM_THREADS=(\d+)/m;
 const RGRAPH = /^Loading graph .*\/(.*?)\.mtx \.\.\./m;
+const REXPER = /^Running experiment (\d+) .../m;
 const RORDER = /^order: (\d+) size: (\d+) \[directed\] \{\}/m;
 const RBATCH = /^Batch fraction: (.+)/m;
 const RRESLT = /^\{(.+?)ms(?:; (.+?)ms duplicate)?\} (.+)/m;
@@ -31,11 +32,22 @@ function writeFile(pth, d) {
 // -----
 
 function writeCsv(pth, rows) {
-  var cols = Object.keys(rows[0]);
+  var cols = rowKeys(rows[0]);
   var a = cols.join()+'\n';
   for (var r of rows)
-    a += [...Object.values(r)].map(v => `"${v}"`).join()+'\n';
+    a += [...rowValues(r)].map(v => `"${v}"`).join()+'\n';
   writeFile(pth, a);
+}
+
+function rowKeys(row) {
+  return Object.keys(row).filter(k => k!=='experiment');
+}
+
+function rowValues(row) {
+  var a = [];
+  for (var k of Object.keys(row))
+    if (k!=='experiment') a.push(row[k]);
+  return a;
 }
 
 
@@ -49,6 +61,7 @@ function readLogLine(ln, data, state) {
   if (ROMPTH.test(ln)) {
     var [, omp_num_threads] = ROMPTH.exec(ln);
     state.omp_num_threads   = parseFloat(omp_num_threads);
+    state.experiment = 0;
     state.graph = '';
     state.order = 0;
     state.size  = 0;
@@ -56,6 +69,10 @@ function readLogLine(ln, data, state) {
     state.time = 0;
     state.duplicate_time = 0;
     state.technique = '';
+  }
+  else if (REXPER.test(ln)) {
+    var [, experiment] = REXPER.exec(ln);
+    state.experiment   = parseFloat(experiment);
   }
   else if (RGRAPH.test(ln)) {
     var [, graph] = RGRAPH.exec(ln);
@@ -73,6 +90,7 @@ function readLogLine(ln, data, state) {
   }
   else if (RRESLT.test(ln)) {
     var [, time, duplicate_time, technique] = RRESLT.exec(ln);
+    if (technique==='transposeArenaOmp') state.batch_fraction = 0;
     if (technique==='visitCountBfs') {
       var last   = data.get(state.graph).slice(-1)[0];
       technique += last.technique.startsWith('add')? '+' : '-';
@@ -104,8 +122,10 @@ function readLog(pth) {
 
 function processCsv(data) {
   var a = [];
-  for (var rows of data.values())
-    a.push(...rows);
+  for (var rows of data.values()) {
+    for (var r of rows)
+      if (r.experiment != 1) a.push(r);
+  }
   return a;
 }
 

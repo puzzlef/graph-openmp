@@ -153,11 +153,11 @@ inline void testVisitCountBfs(const G& x, int steps) {
  * @param x input graph
  */
 template <class G>
-inline void runExperiment(const G& x) {
+inline void runExperiment(const G& x, int run) {
   using K = typename G::key_type;
   using V = typename G::vertex_value_type;
   using E = typename G::edge_value_type;
-  printf("Running experiment ...\n");
+  printf("Running experiment %d ...\n", run);
   // Create random number generator.
   random_device dev;
   default_random_engine rnd(dev());
@@ -251,7 +251,8 @@ int main(int argc, char **argv) {
     LOG(""); println(xa);
     printf("{%09.1fms} %s\n", ta, "duplicateArenaOmpW");
 
-    runExperiment(xa);
+    runExperiment(xa, 1);
+    runExperiment(xa, 2);  // Try again.
   }
   printf("\n");
   return 0;
