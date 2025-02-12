@@ -465,6 +465,7 @@ inline void readMtxFormatToCsrOmpW(G& a, string_view data) {
   bool symmetric; size_t rows, cols, size;
   size_t head = readMtxFormatHeaderW(symmetric, rows, cols, size, data);
   data.remove_prefix(head);
+  auto t0 = timeNow();
   // Allocate space for CSR.
   const size_t N = max(rows, cols);
   const size_t M = symmetric? 2 * size : size;
@@ -498,9 +499,12 @@ inline void readMtxFormatToCsrOmpW(G& a, string_view data) {
     edgeValues[i] = WEIGHTED? new E[M] : nullptr;
     fillValueOmpU(degrees[i], N+1, K());
   }
+  auto t1 = timeNow();
   // Read Edgelist and convert to CSR.
   vector<size_t> counts = readEdgelistFormatToListsOmpU<WEIGHTED, BASE, CHECK, PARTITIONS>(degrees, sources, targets, weights, data, symmetric);
+  auto t2 = timeNow();
   size_t MA = convertEdgelistToCsrListsOmpW<WEIGHTED, PARTITIONS>(offsets, edgeKeys, edgeValues, degrees, sources, targets, weights, counts, N);
+  auto t3 = timeNow();
   if (symmetric) a.resize(N, MA);
   // Free space for sources, targets, and weights.
   for (int i=0; i<T; ++i) {
@@ -515,6 +519,12 @@ inline void readMtxFormatToCsrOmpW(G& a, string_view data) {
     delete edgeKeys[i];
     if (WEIGHTED) delete edgeValues[i];
   }
+  auto t4 = timeNow();
+  // Print time taken.
+  printf("readMtxFormatToCsrOmpW: {%09.3fms} Allocate memory\n", duration(t0, t1));
+  printf("readMtxFormatToCsrOmpW: {%09.3fms} Read Edgelist\n", duration(t1, t2));
+  printf("readMtxFormatToCsrOmpW: {%09.3fms} Convert to CSR\n", duration(t2, t3));
+  printf("readMtxFormatToCsrOmpW: {%09.3fms} Free memory\n", duration(t3, t4));
 }
 #pragma endregion
 

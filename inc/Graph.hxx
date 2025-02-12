@@ -134,6 +134,24 @@ class ArenaDiGraph {
   inline bool directed() const noexcept {
     return true;
   }
+
+  /**
+   * Set the number of vertices in the graph.
+   * @param n new number of vertices
+   * @note This is used for internal purposes only.
+   */
+  inline void setOrder(size_t n) noexcept {
+    N = n;
+  }
+
+  /**
+   * Set the number of edges in the graph.
+   * @param m new number of edges
+   * @note This is used for internal purposes only.
+   */
+  inline void setSize(size_t m) noexcept {
+    M = m;
+  }
   #pragma endregion
 
 
@@ -793,13 +811,15 @@ class ArenaDiGraph {
    * @param ie end iterator of edge keys to remove
    * @param fl comparison function for edge keys
    * @note [ib, ie) must be sorted and unique.
+   * @returns number of edges removed
    */
   template <class I, class FL>
-  inline void removeEdges(K u, I ib, I ie, FL fl) {
-    if (!hasVertex(u)) return;
+  inline size_t removeEdges(K u, I ib, I ie, FL fl) {
+    if (!hasVertex(u)) return 0;
     auto *eb = edges[u], *ee = edges[u] + degrees[u];
     auto  it = set_difference(eb, ee, ib, ie, eb, fl);
     degrees[u] = it - eb;
+    return ee - it;
   }
 
 
@@ -809,11 +829,12 @@ class ArenaDiGraph {
    * @param ib begin iterator of edge keys to remove
    * @param ie end iterator of edge keys to remove
    * @note [ib, ie) must be sorted and unique.
+   * @returns number of edges removed
    */
   template <class I>
-  inline void removeEdges(K u, I ib, I ie) {
+  inline size_t removeEdges(K u, I ib, I ie) {
     auto fl = [](const auto& a, const auto& b) { return a.first <  b; };
-    removeEdges(u, ib, ie, fl);
+    return removeEdges(u, ib, ie, fl);
   }
 
 
@@ -823,10 +844,11 @@ class ArenaDiGraph {
    * @param ib begin iterator of edges to add
    * @param ie end iterator of edges to add
    * @note [ib, ie) must be sorted and unique.
+   * @returns number of edges added
    */
   template <class I>
-  inline void addEdges(K u, I ib, I ie) {
-    if (!hasVertex(u) || ib==ie) return;
+  inline size_t addEdges(K u, I ib, I ie) {
+    if (!hasVertex(u) || ib==ie) return 0;
     auto *eb = edges[u], *ee = edges[u] + degrees[u];
     size_t deg = degrees[u] + distance(ib, ie);
     size_t cap = allocationCapacity(deg);
@@ -837,6 +859,7 @@ class ArenaDiGraph {
     edges[u]   = ptr;
     degrees[u] = it - ptr;
     capacities[u] = cap;
+    return (it - ptr) - (ee - eb);
   }
 
 
@@ -1559,16 +1582,20 @@ class DiGraphCsr {
  * Subtract a graph's edges from another graph.
  * @param a graph to subtract from (updated)
  * @param y graph to subtract
+ * @returns number of edges removed
  */
 template <class H, class G>
-inline void subtractGraphEdgesU(H& a, const G& y) {
+inline size_t subtractGraphEdgesU(H& a, const G& y) {
+  size_t dM = 0;
   y.forEachVertexKey([&](auto u) {
     if (!a.hasVertex(u)) return;
     auto yb = y.beginEdges(u), ye = y.endEdges(u);
     auto fl = [](const auto& a, const auto& b) { return a.first < b.first; };
-    a.removeEdges(u, yb, ye, fl);
+    dM += a.removeEdges(u, yb, ye, fl);
   });
-  a.update(true, true);
+  // Update the number of edges.
+  a.setSize(a.size() - dM);
+  return dM;
 }
 
 
@@ -1576,19 +1603,22 @@ inline void subtractGraphEdgesU(H& a, const G& y) {
  * Subtract a graph's edges from another graph [parallel].
  * @param a graph to subtract from (updated)
  * @param y graph to subtract
+ * @returns number of edges removed
  */
 template <int CHUNK=1024, class H, class G>
-inline void subtractGraphOmpU(H& a, const G& y) {
+inline size_t subtractGraphOmpU(H& a, const G& y) {
   using  K = typename H::key_type;
-  size_t S = y.span();
-  #pragma omp parallel for schedule(dynamic, CHUNK)
+  size_t S = y.span(), dM = 0;
+  #pragma omp parallel for schedule(dynamic, CHUNK) reduction(+:dM)
   for (K u=0; u<S; ++u) {
     if (!y.hasVertex(u) || !a.hasVertex(u)) continue;
     auto yb = y.beginEdges(u), ye = y.endEdges(u);
     auto fl = [](const auto& a, const auto& b) { return a.first < b.first; };
-    a.removeEdges(u, yb, ye, fl);
+    dM += a.removeEdges(u, yb, ye, fl);
   }
-  a.updateOmp(true, true);
+  // Update the number of edges.
+  a.setSize(a.size() - dM);
+  return dM;
 }
 
 
@@ -1597,10 +1627,11 @@ inline void subtractGraphOmpU(H& a, const G& y) {
  * @param a output graph (output)
  * @param x graph to subtract from
  * @param y graph to subtract
+ * @returns number of edges removed
  */
 template <class H, class GX, class GY>
-inline void subtractGraphW(H& a, const GX& x, const GY& y) {
-  size_t S = x.span();
+inline size_t subtractGraphW(H& a, const GX& x, const GY& y) {
+  size_t S = x.span(), dM = 0;
   a.clear();
   a.reserve(S);
   // Add the vertices.
@@ -1628,8 +1659,11 @@ inline void subtractGraphW(H& a, const GX& x, const GY& y) {
     auto fl = [](const auto& a, const auto& b) { return a.first < b.first; };
     auto it = set_difference(xb, xe, yb, ye, ab, fl);
     a.setDegreeUnsafe(u, it - ab);
+    dM += (xe - xb) - (it - ab);
   });
+  // Update the number of edges.
   a.update(true, true);
+  return dM;
 }
 
 
@@ -1639,11 +1673,12 @@ inline void subtractGraphW(H& a, const GX& x, const GY& y) {
  * @param a output graph (output)
  * @param x graph to subtract from
  * @param y graph to subtract
+ * @returns number of edges removed
  */
 template <int CHUNK=1024, class H, class GX, class GY>
-inline void subtractGraphOmpW(H& a, const GX& x, const GY& y) {
+inline size_t subtractGraphOmpW(H& a, const GX& x, const GY& y) {
   using  K = typename H::key_type;
-  size_t S = x.span();
+  size_t S = x.span(), dM = 0;
   a.clearOmp();
   a.reserveOmp(S);
   // Add the vertices.
@@ -1668,7 +1703,7 @@ inline void subtractGraphOmpW(H& a, const GX& x, const GY& y) {
     a.setDegreeUnsafe(u, it - ab);
   }
   // Now add edges of vertices that are touched.
-  #pragma omp parallel for schedule(dynamic, CHUNK)
+  #pragma omp parallel for schedule(dynamic, CHUNK) reduction(+:dM)
   for (K u=0; u<S; ++u) {
     if (!x.hasVertex(u) || !y.hasVertex(u)) continue;
     auto xb = x.beginEdges(u), xe = x.endEdges(u);
@@ -1677,8 +1712,11 @@ inline void subtractGraphOmpW(H& a, const GX& x, const GY& y) {
     auto fl = [](const auto& a, const auto& b) { return a.first < b.first; };
     auto it = set_difference(xb, xe, yb, ye, ab, fl);
     a.setDegreeUnsafe(u, it - ab);
+    dM += (xe - xb) - (it - ab);
   }
+  // Update the number of edges.
   a.updateOmp(true, true);
+  return dM;
 }
 #endif
 
@@ -1687,11 +1725,12 @@ inline void subtractGraphOmpW(H& a, const GX& x, const GY& y) {
  * Add a graph's edges to another graph.
  * @param a graph to add to (updated)
  * @param y graph to add
+ * @returns number of edges added
  */
 template <class H, class G>
-inline void addGraphU(H& a, const G& y) {
-  size_t A = a.span(), Y = y.span();
-  size_t S = max(A, Y);
+inline size_t addGraphU(H& a, const G& y) {
+  size_t A = a.span(),   Y = y.span();
+  size_t S = max(A, Y), dM = 0;
   if (S!=A) a.respan(S);
   // Add new vertices.
   y.forEachVertex([&](auto u, auto d) {
@@ -1700,9 +1739,11 @@ inline void addGraphU(H& a, const G& y) {
   // Add new edges.
   y.forEachVertex([&](auto u, auto d) {
     auto yb = y.beginEdges(u), ye = y.endEdges(u);
-    a.addEdges(u, yb, ye);
+    dM += a.addEdges(u, yb, ye);
   });
-  a.update(true, true);
+  // Update the number of edges.
+  a.setSize(a.size() + dM);
+  return dM;
 }
 
 
@@ -1711,12 +1752,13 @@ inline void addGraphU(H& a, const G& y) {
  * Add a graph's edges to another graph [parallel].
  * @param a graph to add to (updated)
  * @param y graph to add
+ * @returns number of edges added
  */
 template <int CHUNK=512, class H, class G>
-inline void addGraphOmpU(H& a, const G& y) {
+inline size_t addGraphOmpU(H& a, const G& y) {
   using  K = typename H::key_type;
-  size_t A = a.span(), Y = y.span();
-  size_t S = max(A, Y);
+  size_t A = a.span(),   Y = y.span();
+  size_t S = max(A, Y), dM = 0;
   if (S!=A) a.respan(S);
   // Add new vertices.
   #pragma omp parallel for schedule(static, 2048)
@@ -1725,13 +1767,15 @@ inline void addGraphOmpU(H& a, const G& y) {
     a.addVertex(u, y.vertexValue(u));
   }
   // Add new edges.
-  #pragma omp parallel for schedule(dynamic, CHUNK)
+  #pragma omp parallel for schedule(dynamic, CHUNK) reduction(+:dM)
   for (K u=0; u<Y; ++u) {
     if (!y.hasVertex(u)) continue;
     auto yb = y.beginEdges(u), ye = y.endEdges(u);
-    a.addEdges(u, yb, ye);
+    dM += a.addEdges(u, yb, ye);
   }
-  a.updateOmp(true, true);
+  // Update the number of edges.
+  a.setSize(a.size() + dM);
+  return dM;
 }
 #endif
 
@@ -1741,12 +1785,13 @@ inline void addGraphOmpU(H& a, const G& y) {
  * @param a output graph (output)
  * @param x graph to add from
  * @param y graph to add
+ * @returns number of edges added
  */
 template <class H, class GX, class GY>
-inline void addGraphW(H& a, const GX& x, const GY& y) {
+inline size_t addGraphW(H& a, const GX& x, const GY& y) {
   using  K = typename H::key_type;
-  size_t X = x.span(), Y = y.span();
-  size_t S = max(X, Y);
+  size_t X = x.span(),   Y = y.span();
+  size_t S = max(X, Y), dM = 0;
   a.clear();
   a.reserve(S);
   // Add the vertices.
@@ -1766,8 +1811,11 @@ inline void addGraphW(H& a, const GX& x, const GY& y) {
     auto fl = [](const auto& a, const auto& b) { return a.first < b.first; };
     auto it = set_union(xb, xe, yb, ye, ab, fl);
     a.setDegreeUnsafe(u, it - ab);
+    dM += (it - ab) - (xe - xb);
   }
+  // Update the number of edges.
   a.update(true, true);
+  return dM;
 }
 
 
@@ -1779,10 +1827,10 @@ inline void addGraphW(H& a, const GX& x, const GY& y) {
  * @param y graph to add
  */
 template <int CHUNK=512, class H, class GX, class GY>
-inline void addGraphOmpW(H& a, const GX& x, const GY& y) {
+inline size_t addGraphOmpW(H& a, const GX& x, const GY& y) {
   using  K = typename H::key_type;
-  size_t X = x.span(), Y = y.span();
-  size_t S = max(X, Y);
+  size_t X = x.span(),   Y = y.span();
+  size_t S = max(X, Y), dM = 0;
   a.clearOmp();
   a.reserveOmp(S);
   // Add the vertices.
@@ -1798,7 +1846,7 @@ inline void addGraphOmpW(H& a, const GX& x, const GY& y) {
     a.allocateEdges(u, x.degree(u) + y.degree(u));
   }
   // Now add edges of vertices that are touched.
-  #pragma omp parallel for schedule(dynamic, CHUNK)
+  #pragma omp parallel for schedule(dynamic, CHUNK) reduction(+:dM)
   for (K u=0; u<S; ++u) {
     if (!x.hasVertex(u) && !y.hasVertex(u)) continue;
     auto xb = x.beginEdges(u), xe = x.endEdges(u);
@@ -1807,8 +1855,11 @@ inline void addGraphOmpW(H& a, const GX& x, const GY& y) {
     auto fl = [](const auto& a, const auto& b) { return a.first < b.first; };
     auto it = set_union(xb, xe, yb, ye, ab, fl);
     a.setDegreeUnsafe(u, it - ab);
+    dM += (it - ab) - (xe - xb);
   }
+  // Update the number of edges.
   a.updateOmp(true, true);
+  return dM;
 }
 #endif
 #pragma endregion

@@ -4,10 +4,12 @@ const path = require('path');
 
 const ROMPTH = /^OMP_NUM_THREADS=(\d+)/m;
 const RGRAPH = /^Loading graph .*\/(.*?)\.mtx \.\.\./m;
-const REXPER = /^Running experiment (\d+) .../m;
+const RALLOC = /^readMtxFormatToCsrOmpW: \{(.+?)ms\} Allocate memory/m;
+const RREADE = /^readMtxFormatToCsrOmpW: \{(.+?)ms\} Read Edgelist/m;
+const RCONVC = /^readMtxFormatToCsrOmpW: \{(.+?)ms\} Convert to CSR/m;
+const RFREEM = /^readMtxFormatToCsrOmpW: \{(.+?)ms\} Free memory/m;
 const RORDER = /^order: (\d+) size: (\d+) \[directed\] \{\}/m;
-const RBATCH = /^Batch fraction: (.+)/m;
-const RRESLT = /^\{(.+?)ms(?:; (.+?)ms duplicate)?\} (.+)/m;
+const RRESLT = /^\{(.+?)ms\} (.+)/m;
 
 
 
@@ -40,13 +42,13 @@ function writeCsv(pth, rows) {
 }
 
 function rowKeys(row) {
-  return Object.keys(row).filter(k => k!=='experiment');
+  return Object.keys(row);
 }
 
 function rowValues(row) {
   var a = [];
   for (var k of Object.keys(row))
-    if (k!=='experiment') a.push(row[k]);
+    a.push(row[k]);
   return a;
 }
 
@@ -61,18 +63,15 @@ function readLogLine(ln, data, state) {
   if (ROMPTH.test(ln)) {
     var [, omp_num_threads] = ROMPTH.exec(ln);
     state.omp_num_threads   = parseFloat(omp_num_threads);
-    state.experiment = 0;
     state.graph = '';
     state.order = 0;
     state.size  = 0;
-    state.batch_fraction = 0;
-    state.time = 0;
-    state.duplicate_time = 0;
+    state.allocation_time = 0;
+    state.read_time       = 0;
+    state.convert_time    = 0;
+    state.free_time       = 0;
+    state.time      = 0;
     state.technique = '';
-  }
-  else if (REXPER.test(ln)) {
-    var [, experiment] = REXPER.exec(ln);
-    state.experiment   = parseFloat(experiment);
   }
   else if (RGRAPH.test(ln)) {
     var [, graph] = RGRAPH.exec(ln);
@@ -84,20 +83,26 @@ function readLogLine(ln, data, state) {
     state.order = parseFloat(order);
     state.size  = parseFloat(size);
   }
-  else if (RBATCH.test(ln)) {
-    var [, batch_fraction] = RBATCH.exec(ln);
-    state.batch_fraction   = parseFloat(batch_fraction);
+  else if (RALLOC.test(ln)) {
+    var [, time] = RALLOC.exec(ln);
+    state.allocation_time = parseFloat(time);
+  }
+  else if (RREADE.test(ln)) {
+    var [, time] = RREADE.exec(ln);
+    state.read_time = parseFloat(time);
+  }
+  else if (RCONVC.test(ln)) {
+    var [, time] = RCONVC.exec(ln);
+    state.convert_time = parseFloat(time);
+  }
+  else if (RFREEM.test(ln)) {
+    var [, time] = RFREEM.exec(ln);
+    state.free_time = parseFloat(time);
   }
   else if (RRESLT.test(ln)) {
-    var [, time, duplicate_time, technique] = RRESLT.exec(ln);
-    if (technique==='transposeArenaOmp') state.batch_fraction = 0;
-    if (technique==='visitCountBfs') {
-      var last   = data.get(state.graph).slice(-1)[0];
-      technique += last.technique.startsWith('add')? '+' : '-';
-    }
+    var [, time, technique] = RRESLT.exec(ln);
     data.get(state.graph).push(Object.assign({}, state, {
-      time:           parseFloat(time),
-      duplicate_time: parseFloat(duplicate_time || '0'),
+      time: parseFloat(time),
       technique,
     }));
   }
@@ -124,7 +129,7 @@ function processCsv(data) {
   var a = [];
   for (var rows of data.values()) {
     for (var r of rows)
-      if (r.experiment != 1) a.push(r);
+      a.push(r);
   }
   return a;
 }
