@@ -1,96 +1,55 @@
-[OpenMP]-based parallel graph implementation.
+Design of high-performance parallel Graph interface supporting efficient Dynamic batch updates.
 
-I have been trying to parallelize the graph data structure from bottom up.
-- Each vertex has a **list of edges**, which is a **sorted vector of pairs** of *edge id* and *weight*.
-- A sorted list has better locality, lookup, and update time.
-- To amortize cost of edge deletions and insertions, they are *simply queued up* and lazily updated.
-- *Either* a batch of deletions *or* insertions must be done at a time to use lazy behaviour (not a mix).
-- The lazy update is done manually by calling `update()` with a temporary per-thread buffer.
-- The buffer is needed to do an *in-place* `set_union_last_unique()` / `set_difference_unique()`.
-- Different threads must work on *different* vertices.
+Research in graph-structured data has grown rapidly due to graphs' ability to represent complex real-world information and capture intricate relationships, particularly as many real-world graphs evolve dynamically through edge/vertex insertions and deletions. This has spurred interest in programming frameworks for managing, maintaining, and processing such dynamic graphs. In our report, we evaluate the performance of [PetGraph (Rust)], [Stanford Network Analysis Platform (SNAP)], [SuiteSparse:GraphBLAS], [cuGraph], [Aspen], and [our custom implementation] in tasks including loading graphs from disk to memory, cloning loaded graphs, applying in-place edge deletions/insertions, and performing a simple iterative graph traversal algorithm. Our implementation demonstrates significant performance improvements: it outperforms PetGraph, SNAP, SuiteSparse:GraphBLAS, cuGraph, and Aspen by factors of `177x`, `106x`, `76x`, `17x`, and `3.3x` in graph loading; `20x`, `235x`, `0.24x`, `1.3x`, and `0x` in graph cloning; `141x`/`45x`, `44x`/`25x`, `13x`/`11x`, `28x`/`34x`, and `3.5x`/`2.2x` in edge deletions/insertions; and `67x`/`63x`, `86x`/`86x`, `2.5x`/`2.6x`, `0.25x`/`0.24x`, and `1.3x`/`1.3x` in traversal on updated graphs with deletions/insertions.
 
-<!-- [![](https://i.imgur.com/Jp1UDS5.png)][sheetp] -->
-<!-- [![](https://i.imgur.com/7lA6tWb.png)][sheetp] -->
-<!-- [![](https://i.imgur.com/170NBzh.png)][sheetp] -->
-<!-- [![](https://i.imgur.com/rdyR5Uo.png)][sheetp] -->
+Below, we plot the runtime (in seconds, logarithmic scale) for loading a graph from file into memory with PetGraph, SNAP, SuiteSparse:GraphBLAS, cuGraph, Aspen, and **Our DiGraph** for each graph in the dataset.
 
-<br>
+![Image](https://github.com/user-attachments/assets/3ef09c02-3fa1-4558-9cef-45531093a47a)
 
-The last time i tried parallelizing graph reading with 12 threads, performance
-as 1/2 that of sequential, with converting each line to numbers taking the most
-time. It seems that the default stream operator (`>>`) uses locks for some
-reason to support locales, and is not recommended to use in parallel code.
+Next, we plot the runtime (in milliseconds, logarithmic scale) of deleting a batch of `10^−7|𝐸|` to `0.1|𝐸|` randomly generated edges into a graph, **in-place**, in multiples of `10`. Here, we evaluate PetGraph, SNAP, SuiteSparse:GraphBLAS, cuGraph, Aspen, and Our DiGraph on each graph in the dataset. The left subfigure presents overall runtimes using the geometric mean for consistent scaling, while the right subfigure shows runtimes for individual graphs.
 
-[![](https://i.imgur.com/WgPl7nr.png)][sheetp]
+![Image](https://github.com/user-attachments/assets/7252a1fc-abb2-4f38-afd5-0479e08c6468)
 
-<br>
 
-I switched to using `strtoull()` and `strtod()` for the conversion, switched to
-`istringstream` from `stringstream`, and parallelized edge addition into the
-graph (along with parallel update). On `web-Google` graph we are now getting a
-speedup of **~6x** for graph loading. I now log system date and time for
-detecting any more bottlenecks. The parallel edge update is as follows. Only one
-of the 12 threads will add the edge to the graph if the source vertex belongs to
-its chunk.
+Below, we plot the runtime of inserting a batch of edges into a graph, **in-place**, using PetGraph, SNAP, SuiteSparse:GraphBLAS, cuGraph, Aspen, and **Our DiGraph**.
 
-<!-- [![](https://i.imgur.com/ONf0uPi.png)][sheetp] -->
-[![](https://i.imgur.com/EBCyi5u.png)][sheetp]
-<!-- [![](https://i.imgur.com/lB8xouh.png)][sheetp] -->
-<!-- [![](https://i.imgur.com/pMRwmIa.png)][sheetp] -->
-<!-- [![](https://i.imgur.com/VJMyves.png)][sheetp] -->
+![Image](https://github.com/user-attachments/assets/a5edbd2e-012e-4d52-9edc-fc5f83bf2d21)
+
+Finally, we plot the runtime of traversing a graph using a simple iterative algorithm (`42`-step reverse walks from each vertex in a graph) on graphs with edge deletions. We evaluate PetGraph, SNAP, SuiteSparse:GraphBLAS, cuGraph, Aspen, and **Our DiGraph** on each graph in the dataset.
+
+![Image](https://github.com/user-attachments/assets/60ec8b22-e4d0-4ee7-8752-21bda26add01)
+
+Refer to our technical report for more details: \
+[Performance Comparison of Graph Representations Which Support Dynamic Graph Updates][report].
 
 <br>
 
-Graph functions such as `symmetricize()` are now simply parallelized as below.
-
-[![](https://i.imgur.com/tJNoNYO.png)][sheetp]
-
-<br>
-
-We are able to load graphs with more that *4 billion edges* in under **10**
-**minutes**. Most of the time spent is loading the graph is the time needed to
-*read the file*, and *add edges to the graph data structure*. We get a net
-loading rate of about **10 million edges per second**. *Updating the graph*,
-which involves sorting the edges of each vertex while picking only the last
-unique entry, is about *50 times faster*.
-
-[![](https://i.imgur.com/9FIflvU.png)][sheetp]
-[![](https://i.imgur.com/PSALt0j.png)][sheetp]
-[![](https://i.imgur.com/bkqzHLa.png)][sheetp]
+> [!NOTE]
+> You can just copy `main.sh` to your system and run it. \
+> For the code, refer to `main.cxx`.
 
 <br>
-
-All outputs are saved in a [gist] and a small part of the output is listed here.
-Some [charts] are also included below, generated from [sheets]. The input data
-used for this experiment is available from the [SuiteSparse Matrix Collection].
-This experiment was done with guidance from [Prof. Kishore Kothapalli] and
-[Prof. Dip Sankar Banerjee].
-
-
-[OpenMP]: https://www.openmp.org
-
 <br>
+
+
+### Code structure
+
+The code structure is as follows:
 
 ```bash
-$ g++ -std=c++17 -O3 main.cxx
-$ ./a.out ~/Data/GAP-road.mtx
-$ ./a.out ~/Data/GAP-twitter.mtx
-$ ...
-
-# 2022-12-17 21:04:36 Loading graph /home/subhajit/Data/GAP-road.mtx ...
-# 2022-12-17 21:04:36 OMP_NUM_THREADS=24
-# 2022-12-17 21:04:42 readMtxOmpW(): vertices=269.8ms, read=3173.7ms, parse=218.2ms, edges=2290.6ms, update=193.3ms
-# 2022-12-17 21:04:42 order: 23947347 size: 57708624 [directed] {}
-# 2022-12-17 21:04:42 [06160.472 ms] readMtxOmpW
-#
-# 2022-12-17 21:04:43 Loading graph /home/subhajit/Data/GAP-twitter.mtx ...
-# 2022-12-17 21:04:43 OMP_NUM_THREADS=24
-# 2022-12-17 21:08:07 readMtxOmpW(): vertices=711.1ms, read=138848.7ms, parse=10906.0ms, edges=50429.3ms, update=3494.1ms
-# 2022-12-17 21:08:07 order: 61578415 size: 1468364884 [directed] {}
-# 2022-12-17 21:08:07 [204464.219 ms] readMtxOmpW
-#
-# ...
+- inc/_*.hxx: Utility functions
+- inc/**.hxx: Common graph functions
+- inc/_memory.hxx: The memory allocators (FAA, AA, CP2AA)
+- inc/csr.hxx: Compressed Sparse Row (CSR) data structure functions
+- inc/Graph.hxx: Graph data structure
+- inc/io.hxx: Graph file reader (MTX format)
+- inc/main.hxx: Main header
+- main.cxx: Experimentation code
+- main.sh: Experimentation script
+- process.js: Node.js script for processing output logs
 ```
+
+Note that each branch in this repository contains code for a specific experiment. The `main` branch contains code for the final experiment. If the intention of a branch in unclear, or if you have comments on our technical report, feel free to open an issue.
 
 <br>
 <br>
@@ -98,6 +57,11 @@ $ ...
 
 ## References
 
+- [Algorithm 1037: SuiteSparse:GraphBLAS: Parallel Graph Algorithms in the Language of Sparse Linear Algebra; Timothy A. Davis et al. (2023)](https://dl.acm.org/doi/full/10.1145/3577195)
+- [Low-latency graph streaming using compressed purely-functional trees; Laxman Dhulipala et al. (2019)](https://dl.acm.org/doi/abs/10.1145/3314221.3314598)
+- [cuGraph C++ primitives: vertex/edge-centric building blocks for parallel graph computing; Seunghwa Kang et al. (2023)](https://ieeexplore.ieee.org/abstract/document/10196665)
+- [SNAP: A General-Purpose Network Analysis and Graph-Mining Library; Jure Leskovec et al. (2016)](https://dl.acm.org/doi/abs/10.1145/2898361)
+- [The University of Florida Sparse Matrix Collection; Timothy A. Davis et al. (2011)](https://doi.org/10.1145/2049662.2049663)
 - [How can I convert a std::string to int?](https://stackoverflow.com/a/7664227/1413259)
 - [Fastest way to read numerical values from text file in C++ (double in this case)](https://stackoverflow.com/a/5678975/1413259)
 - [What's the difference between istringstream, ostringstream and stringstream? / Why not use stringstream in every case?](https://stackoverflow.com/a/3292168/1413259)
@@ -115,20 +79,20 @@ $ ...
 - [Date and time utilities :: cppreference](https://en.cppreference.com/w/cpp/chrono)
 - [Standard library header &lt;string&gt; :: cppreference](https://en.cppreference.com/w/cpp/header/string)
 - [Standard library header &lt;algorithm&gt; :: cppreference](https://en.cppreference.com/w/cpp/header/algorithm)
-- [The University of Florida Sparse Matrix Collection; Timothy A. Davis et al. (2011)](https://doi.org/10.1145/2049662.2049663)
 
 <br>
 <br>
 
-[![](https://i.imgur.com/LWJP5Hy.jpg)](https://www.youtube.com/watch?v=iHsqqgvwUxk)<br>
-[![ORG](https://img.shields.io/badge/org-ionicf-green?logo=Org)](https://ionicf.github.io)
-[![DOI](https://zenodo.org/badge/576609870.svg)](https://zenodo.org/badge/latestdoi/576609870)
+
+[![](https://img.youtube.com/vi/yqO7wVBTuLw/maxresdefault.jpg)](https://www.youtube.com/watch?v=yqO7wVBTuLw)<br>
+[![ORG](https://img.shields.io/badge/org-puzzlef-green?logo=Org)](https://puzzlef.github.io)
 
 
-[Prof. Dip Sankar Banerjee]: https://sites.google.com/site/dipsankarban/
-[Prof. Kishore Kothapalli]: https://faculty.iiit.ac.in/~kkishore/
-[SuiteSparse Matrix Collection]: https://sparse.tamu.edu
-[gist]: https://gist.github.com/wolfram77/1b2c4f07a1dc46a330b1dc14afa2b4ab
-[charts]: https://imgur.com/a/94omat4
-[sheets]: https://docs.google.com/spreadsheets/d/16M2A3ucmqjSr1JL-WWnT-_h3Edggsk_-MvT2MALfHPs/edit?usp=sharing
-[sheetp]: https://docs.google.com/spreadsheets/d/e/2PACX-1vToyQvdBJF-sc9QZ8X2cL6udirwEhWmQnusLT6HgtxYkdRnwrcoJoMDpwC0RMh1Dzh5a4cdrmkDMlRg/pubhtml
+[PetGraph (Rust)]: https://github.com/petgraph/petgraph
+[Stanford Network Analysis Platform (SNAP)]: https://github.com/snap-stanford/snap
+[SuiteSparse:GraphBLAS]: https://github.com/GraphBLAS/LAGraph
+[cuGraph]: https://github.com/rapidsai/cugraph
+[Aspen]: https://github.com/ldhulipala/aspen
+[our custom implementation]: https://github.com/puzzlef/graph-openmp
+[sheets-o1]: https://docs.google.com/spreadsheets/d/102WZCbN0cGFns8VlCoY_b-_dh-5C9JhPKgUg2d32WU0/edit?usp=sharing
+[report]: https://arxiv.org/abs/2502.13862
