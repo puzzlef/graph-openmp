@@ -162,12 +162,12 @@ inline void runExperiment(const G& x, int run) {
   random_device dev;
   default_random_engine rnd(dev());
   // Test transpose graph.
-  {
-    ArenaDiGraph<K, V, E> ytr;
-    ytr.setAllocator(x.allocator());
-    transposeArenaOmpW(ytr, x);
-    ytr.clearOmp();
-  }
+  // {
+  //   ArenaDiGraph<K, V, E> ytr;
+  //   ytr.setAllocator(x.allocator());
+  //   transposeArenaOmpW(ytr, x);
+  //   ytr.clearOmp();
+  // }
   // Experiment of various batch fractions.
   for (double frac=1e-7; frac<=1e-1; frac*=10) {
     printf("Batch fraction: %.1e\n", frac);
